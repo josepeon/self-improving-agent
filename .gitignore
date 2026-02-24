@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Planning docs (internal, not tracked)
+planning/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific
+logs/
+models/finetuned/
+models/registry.json
+*.jsonl
+
+# Environment
+.env
+.env.local
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# MLX model cache (use system cache)
+# Models live in ~/.cache/huggingface/
+*.gguf
+
+# Logs and data
+logs/
+data/interactions/
+*.db
+*.sqlite
+
+# Environment
+.env
+.env.local
