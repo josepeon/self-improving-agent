@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Self-improving AI agent infrastructure for OH platform"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
     {name = "Jose Peon"},
 ]
@@ -45,7 +45,7 @@ sia = "self_improving_agent.cli:main"
 where = ["src"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 88
 
 [tool.ruff.lint]
@@ -76,7 +76,7 @@ markers = [
 ]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
