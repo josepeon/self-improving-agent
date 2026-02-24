@@ -218,3 +218,140 @@ class TestRouterComplexityAssessment:
             assert (
                 router._assess_complexity([{"role": "user", "content": msg}]) is True
             ), f"Expected '{msg}' to be complex"
+
+
+class TestRouterStream:
+    """Tests for route_stream()."""
+
+    @pytest.mark.asyncio
+    async def test_stream_simple_routes_local(self, router, mock_local):
+        async def _fake_stream(*args, **kwargs):
+            for t in ["Hi", " there"]:
+                yield t
+
+        mock_local.generate_stream = _fake_stream
+
+        tokens = []
+        async for token in router.route_stream(
+            messages=[{"role": "user", "content": "Hi"}],
+        ):
+            tokens.append(token)
+
+        assert tokens == ["Hi", " there"]
+
+    @pytest.mark.asyncio
+    async def test_stream_complex_routes_remote(self, router, mock_remote):
+        async def _fake_stream(*args, **kwargs):
+            for t in ["Sure", ", let me", " explain"]:
+                yield t
+
+        mock_remote.generate_stream = _fake_stream
+
+        tokens = []
+        async for token in router.route_stream(
+            messages=[{"role": "user", "content": "Explain how GPUs work"}],
+        ):
+            tokens.append(token)
+
+        assert tokens == ["Sure", ", let me", " explain"]
+
+    @pytest.mark.asyncio
+    async def test_stream_force_remote(self, router, mock_remote):
+        async def _fake_stream(*args, **kwargs):
+            yield "forced"
+
+        mock_remote.generate_stream = _fake_stream
+
+        tokens = []
+        async for token in router.route_stream(
+            messages=[{"role": "user", "content": "Hi"}],
+            force_provider="remote",
+        ):
+            tokens.append(token)
+
+        assert tokens == ["forced"]
+
+    @pytest.mark.asyncio
+    async def test_stream_force_local(self, router, mock_local):
+        async def _fake_stream(*args, **kwargs):
+            yield "local"
+
+        mock_local.generate_stream = _fake_stream
+
+        tokens = []
+        async for token in router.route_stream(
+            messages=[{"role": "user", "content": "Hi"}],
+            force_provider="local",
+        ):
+            tokens.append(token)
+
+        assert tokens == ["local"]
+
+    @pytest.mark.asyncio
+    async def test_stream_quality_mode(self, router, mock_remote):
+        async def _fake_stream(*args, **kwargs):
+            yield "quality"
+
+        mock_remote.generate_stream = _fake_stream
+
+        tokens = []
+        async for token in router.route_stream(
+            messages=[{"role": "user", "content": "Hi"}],
+            quality_mode="quality",
+        ):
+            tokens.append(token)
+
+        assert tokens == ["quality"]
+
+    @pytest.mark.asyncio
+    async def test_stream_fast_mode(self, router, mock_local):
+        async def _fake_stream(*args, **kwargs):
+            yield "fast"
+
+        mock_local.generate_stream = _fake_stream
+
+        tokens = []
+        async for token in router.route_stream(
+            messages=[{"role": "user", "content": "Hi"}],
+            quality_mode="fast",
+        ):
+            tokens.append(token)
+
+        assert tokens == ["fast"]
+
+    @pytest.mark.asyncio
+    async def test_stream_fallback_on_local_failure(
+        self, router, mock_local, mock_remote
+    ):
+        async def _fail_stream(*args, **kwargs):
+            raise RuntimeError("Local stream crashed")
+            yield
+
+        async def _remote_stream(*args, **kwargs):
+            yield "fallback"
+
+        mock_local.generate_stream = _fail_stream
+        mock_remote.generate_stream = _remote_stream
+
+        tokens = []
+        async for token in router.route_stream(
+            messages=[{"role": "user", "content": "Hi"}],
+        ):
+            tokens.append(token)
+
+        assert tokens == ["fallback"]
+        assert router.stats["fallback_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_stream_remote_failure_raises(self, router, mock_remote):
+        async def _fail_stream(*args, **kwargs):
+            raise RuntimeError("Remote down")
+            yield
+
+        mock_remote.generate_stream = _fail_stream
+
+        with pytest.raises(RuntimeError, match="Remote down"):
+            async for _ in router.route_stream(
+                messages=[{"role": "user", "content": "Explain quantum physics"}],
+            ):
+                pass

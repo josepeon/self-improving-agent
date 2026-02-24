@@ -1,6 +1,6 @@
 """Tests for GroqProvider (mocked — no real API calls)."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -200,3 +200,59 @@ class TestGroqProviderHealth:
         groq_provider._client = mock_client
 
         assert await groq_provider.health_check() is False
+
+
+class TestGroqProviderImportError:
+    """Tests for import error handling."""
+
+    def test_missing_groq_package(self):
+        import sys
+
+        provider = GroqProvider(api_key="test-key")
+        provider._client = None  # force re-init
+
+        # Temporarily remove groq from sys.modules so the import re-fires
+        groq_modules = {k: v for k, v in sys.modules.items() if k.startswith("groq")}
+        for k in groq_modules:
+            del sys.modules[k]
+
+        real_import = (
+            __builtins__.__import__
+            if hasattr(__builtins__, "__import__")
+            else __import__
+        )
+
+        def mock_import(name, *args, **kwargs):
+            if name == "groq":
+                raise ImportError("No module named 'groq'")
+            return real_import(name, *args, **kwargs)
+
+        try:
+            with (
+                patch("builtins.__import__", side_effect=mock_import),
+                pytest.raises(ImportError, match="groq package is required"),
+            ):
+                provider._get_client()
+        finally:
+            # Restore groq modules
+            sys.modules.update(groq_modules)
+
+
+class TestGroqProviderStreamError:
+    """Tests for streaming error handling."""
+
+    @pytest.mark.asyncio
+    async def test_stream_error_propagates(self, groq_provider):
+        mock_client = AsyncMock()
+
+        async def mock_failing_stream(*args, **kwargs):
+            raise ConnectionError("Stream interrupted")
+
+        mock_client.chat.completions.create = mock_failing_stream
+        groq_provider._client = mock_client
+
+        with pytest.raises(ConnectionError, match="Stream interrupted"):
+            async for _ in groq_provider.generate_stream(
+                messages=[{"role": "user", "content": "Hi"}]
+            ):
+                pass

@@ -87,3 +87,76 @@ class TestMLXProviderHealth:
         # Don't pre-load — let it try and fail
         result = await provider.health_check()
         assert result is False
+
+
+class TestMLXProviderEnsureLoaded:
+    """Tests for lazy model loading."""
+
+    @pytest.mark.asyncio
+    async def test_ensure_loaded_imports_mlx_lm(self):
+        """Verify _ensure_loaded calls mlx_lm.load."""
+        provider = MLXProvider(model_path="test-model")
+        mock_model = MagicMock()
+        mock_tokenizer = MagicMock()
+
+        with patch("mlx_lm.load", return_value=(mock_model, mock_tokenizer)):
+            await provider._ensure_loaded()
+
+        assert provider._model is mock_model
+        assert provider._tokenizer is mock_tokenizer
+
+    @pytest.mark.asyncio
+    async def test_ensure_loaded_skips_if_already_loaded(self, mlx_provider):
+        """Should not reload if model is already set."""
+        original_model = mlx_provider._model
+        await mlx_provider._ensure_loaded()
+        assert mlx_provider._model is original_model
+
+    @pytest.mark.asyncio
+    async def test_ensure_loaded_import_error(self):
+        """Should raise ImportError if mlx_lm not installed."""
+        import builtins
+
+        real_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "mlx_lm":
+                raise ImportError("No module named 'mlx_lm'")
+            return real_import(name, *args, **kwargs)
+
+        provider = MLXProvider(model_path="test-model")
+
+        with (
+            patch("builtins.__import__", side_effect=mock_import),
+            pytest.raises(ImportError, match="mlx-lm package is required"),
+        ):
+            await provider._ensure_loaded()
+
+    @pytest.mark.asyncio
+    async def test_adapter_path_passed(self):
+        """Verify adapter_path is forwarded to mlx_lm.load."""
+        provider = MLXProvider(model_path="test-model", adapter_path="/path/to/adapter")
+        mock_model = MagicMock()
+        mock_tokenizer = MagicMock()
+
+        with patch(
+            "mlx_lm.load", return_value=(mock_model, mock_tokenizer)
+        ) as mock_load:
+            await provider._ensure_loaded()
+
+        mock_load.assert_called_once_with("test-model", adapter_path="/path/to/adapter")
+
+
+class TestMLXProviderGenerateError:
+    """Tests for MLX generation error handling."""
+
+    @pytest.mark.asyncio
+    async def test_generate_error_propagates(self, mlx_provider):
+        """Generation errors should propagate."""
+        with (
+            patch("mlx_lm.generate", side_effect=RuntimeError("OOM")),
+            pytest.raises(RuntimeError, match="OOM"),
+        ):
+            await mlx_provider.generate(
+                messages=[{"role": "user", "content": "Hi"}],
+            )
