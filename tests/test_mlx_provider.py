@@ -1,11 +1,21 @@
 """Tests for MLXProvider (mocked — no real model loading)."""
 
+import sys
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from self_improving_agent.providers.base import ProviderResponse
 from self_improving_agent.providers.mlx_provider import MLXProvider
+
+# Ensure mlx_lm is importable even on Linux CI (where it doesn't exist).
+# We inject a stub module so that patch("mlx_lm.X") works everywhere.
+if "mlx_lm" not in sys.modules:
+    _stub = ModuleType("mlx_lm")
+    _stub.load = MagicMock()
+    _stub.generate = MagicMock()
+    sys.modules["mlx_lm"] = _stub
 
 
 @pytest.fixture
