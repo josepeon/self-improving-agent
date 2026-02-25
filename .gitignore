@@ -48,7 +48,7 @@ htmlcov/
 
 # Logs and data
 logs/
-data/interactions/
+data/
 *.db
 *.sqlite
 
