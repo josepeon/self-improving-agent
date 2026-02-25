@@ -69,7 +69,9 @@ async def train_model(dataset: list[dict], version: str) -> str:
         lora_config=config,
     )
 
-    logger.info("Starting LoRA training: %d examples, version %s", len(dataset), version)
+    logger.info(
+        "Starting LoRA training: %d examples, version %s", len(dataset), version
+    )
     adapter_path = await finetuner.train(dataset, version)
     logger.info("Adapters saved to: %s", adapter_path)
     return adapter_path
@@ -86,9 +88,15 @@ async def evaluate_model(adapter_path: str) -> dict:
     system_prompt = ""
     if prompts_path.exists():
         system_prompt = prompts_path.read_text().strip()
-        logger.info("Loaded system prompt from %s (%d chars)", prompts_path.name, len(system_prompt))
+        logger.info(
+            "Loaded system prompt from %s (%d chars)",
+            prompts_path.name,
+            len(system_prompt),
+        )
     else:
-        logger.warning("System prompt not found at %s — evaluating without it", prompts_path)
+        logger.warning(
+            "System prompt not found at %s — evaluating without it", prompts_path
+        )
 
     test_questions = [
         "What is OH?",
@@ -113,9 +121,7 @@ async def evaluate_model(adapter_path: str) -> dict:
     return results
 
 
-async def register_model(
-    version: str, adapter_path: str, dataset_size: int
-) -> None:
+async def register_model(version: str, adapter_path: str, dataset_size: int) -> None:
     """Register the trained model as production in the registry."""
     from self_improving_agent.training import ModelRegistry, ModelStatus, ModelVersion
 

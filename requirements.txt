@@ -1,0 +1,7 @@
+# Self-Improving Agent — All dependencies
+# Install with: pip install -r requirements.txt
+#
+# This is equivalent to: pip install -e ".[dev,rag,mlx]"
+# For minimal install, use: pip install -e "."
+
+-e ".[dev,rag,mlx]"

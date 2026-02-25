@@ -150,9 +150,7 @@ class SyntheticDataGenerator:
             {"role": "system", "content": self.system_prompt},
             {
                 "role": "user",
-                "content": ANSWER_GEN_USER.format(
-                    question=question, context=context
-                ),
+                "content": ANSWER_GEN_USER.format(question=question, context=context),
             },
         ]
         return await self._call_groq(messages, temperature=0.6, max_tokens=300)
@@ -180,7 +178,7 @@ class SyntheticDataGenerator:
         outfile = None
         if output_path:
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            outfile = open(output_path, "a")
+            outfile = open(output_path, "a")  # noqa: SIM115
 
         try:
             for i, chunk in enumerate(chunks, 1):
@@ -190,7 +188,9 @@ class SyntheticDataGenerator:
                 text = chunk["text"]
                 source = chunk.get("source", "")
 
-                logger.info("[%d/%d] Generating questions for: %s", i, total, source[:60])
+                logger.info(
+                    "[%d/%d] Generating questions for: %s", i, total, source[:60]
+                )
 
                 # Step 1: generate questions
                 questions = await self.generate_questions(text)
@@ -252,15 +252,21 @@ def _get_chunks_from_store(*, max_chunks: int = 200) -> list[dict[str, str]]:
     metas = results.get("metadatas") or []
 
     # Bucket by category
-    HIGH_VALUE = {
-        "product", "strategy", "project", "persona",
-        "planning", "go-to-market", "release", "overview",
+    high_value = {
+        "product",
+        "strategy",
+        "project",
+        "persona",
+        "planning",
+        "go-to-market",
+        "release",
+        "overview",
     }
     high: list[dict[str, str]] = []
     low: list[dict[str, str]] = []
     seen: set[str] = set()
 
-    for doc, meta in zip(docs, metas):
+    for doc, meta in zip(docs, metas, strict=False):
         if not doc or len(doc.strip()) < 50:
             continue
         key = doc[:200]
@@ -270,7 +276,7 @@ def _get_chunks_from_store(*, max_chunks: int = 200) -> list[dict[str, str]]:
 
         entry = {"text": doc, "source": (meta or {}).get("source", "")}
         category = (meta or {}).get("category", "")
-        if category in HIGH_VALUE:
+        if category in high_value:
             high.append(entry)
         else:
             low.append(entry)
@@ -286,7 +292,10 @@ def _get_chunks_from_store(*, max_chunks: int = 200) -> list[dict[str, str]]:
     chunks = high + sampled_low
     logger.info(
         "Selected %d chunks: %d high-value + %d sampled (from %d total)",
-        len(chunks), len(high), len(sampled_low), len(seen),
+        len(chunks),
+        len(high),
+        len(sampled_low),
+        len(seen),
     )
     return chunks
 
@@ -334,7 +343,8 @@ async def run(output_path: Path, *, resume: bool = False) -> int:
             start_index = int(existing / 2.5)
             logger.info(
                 "Resuming: %d existing pairs, starting from chunk ~%d",
-                existing, start_index,
+                existing,
+                start_index,
             )
         else:
             logger.info("No existing output found, starting fresh")
@@ -351,7 +361,9 @@ async def run(output_path: Path, *, resume: bool = False) -> int:
 
     start = time.time()
     pairs = await generator.generate_pairs_from_chunks(
-        chunks, output_path=output_path, start_index=start_index,
+        chunks,
+        output_path=output_path,
+        start_index=start_index,
     )
     elapsed = time.time() - start
 

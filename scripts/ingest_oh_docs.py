@@ -73,7 +73,9 @@ def discover_files() -> list[tuple[Path, dict[str, str]]]:
     # oh-companion-backend/prompts/v1.txt (production persona)
     v1 = PROMPTS_DIR / "v1.txt"
     if v1.exists():
-        files.append((v1, {"source_repo": "oh-companion-backend", "category": "persona"}))
+        files.append(
+            (v1, {"source_repo": "oh-companion-backend", "category": "persona"})
+        )
 
     return files
 
