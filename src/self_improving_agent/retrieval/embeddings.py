@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import asyncio
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
 
 _DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
@@ -66,7 +67,7 @@ class EmbeddingModel:
         """Return embeddings for *texts* as a ``(N, dim)`` float32 array."""
         await self._ensure_loaded()
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
+        return await loop.run_in_executor(  # type: ignore[return-value]
             None,
             partial(self._model.encode, texts, normalize_embeddings=True),
         )
