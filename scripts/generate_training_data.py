@@ -160,48 +160,74 @@ class SyntheticDataGenerator:
     async def generate_pairs_from_chunks(
         self,
         chunks: list[dict[str, str]],
+        *,
+        output_path: Path | None = None,
+        start_index: int = 0,
     ) -> list[dict]:
         """Generate SFT pairs from a list of chunk dicts.
 
         Each chunk dict has ``text`` and ``source`` keys.
+        If *output_path* is given, pairs are appended incrementally
+        so progress is saved even if the process is interrupted.
+        *start_index* lets you resume from where you left off.
 
         Returns Alpaca-style dicts: {instruction, input, output, history}.
         """
         pairs: list[dict] = []
         total = len(chunks)
 
-        for i, chunk in enumerate(chunks, 1):
-            text = chunk["text"]
-            source = chunk.get("source", "")
+        # Open file in append mode for incremental saves
+        outfile = None
+        if output_path:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            outfile = open(output_path, "a")
 
-            logger.info("[%d/%d] Generating questions for: %s", i, total, source[:60])
-
-            # Step 1: generate questions
-            questions = await self.generate_questions(text)
-            if not questions:
-                logger.warning("  No questions generated, skipping chunk")
-                continue
-
-            await asyncio.sleep(self.rate_limit_delay)
-
-            # Step 2: generate answers for each question
-            for q in questions:
-                answer = await self.generate_answer(q, text)
-                if not answer.strip():
+        try:
+            for i, chunk in enumerate(chunks, 1):
+                if i - 1 < start_index:
                     continue
 
-                pairs.append({
-                    "instruction": self.system_prompt,
-                    "input": q,
-                    "output": answer.strip(),
-                    "history": [],
-                })
-                logger.info("  Q: %.70s…", q)
-                logger.info("  A: %.70s…", answer.strip())
+                text = chunk["text"]
+                source = chunk.get("source", "")
+
+                logger.info("[%d/%d] Generating questions for: %s", i, total, source[:60])
+
+                # Step 1: generate questions
+                questions = await self.generate_questions(text)
+                if not questions:
+                    logger.warning("  No questions generated, skipping chunk")
+                    continue
 
                 await asyncio.sleep(self.rate_limit_delay)
 
-            logger.info("  → %d pairs so far", len(pairs))
+                # Step 2: generate answers for each question
+                for q in questions:
+                    answer = await self.generate_answer(q, text)
+                    if not answer.strip():
+                        continue
+
+                    pair = {
+                        "instruction": self.system_prompt,
+                        "input": q,
+                        "output": answer.strip(),
+                        "history": [],
+                    }
+                    pairs.append(pair)
+
+                    # Incremental save
+                    if outfile:
+                        outfile.write(json.dumps(pair, ensure_ascii=False) + "\n")
+                        outfile.flush()
+
+                    logger.info("  Q: %.70s…", q)
+                    logger.info("  A: %.70s…", answer.strip())
+
+                    await asyncio.sleep(self.rate_limit_delay)
+
+                logger.info("  → %d pairs so far (chunk %d/%d)", len(pairs), i, total)
+        finally:
+            if outfile:
+                outfile.close()
 
         return pairs
 
@@ -265,16 +291,15 @@ def _get_chunks_from_store(*, max_chunks: int = 200) -> list[dict[str, str]]:
     return chunks
 
 
-def save_pairs(pairs: list[dict], output_path: Path) -> None:
-    """Write Alpaca-style JSONL."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        for pair in pairs:
-            f.write(json.dumps(pair, ensure_ascii=False) + "\n")
-    logger.info("Saved %d training pairs to %s", len(pairs), output_path)
+def _count_existing_pairs(output_path: Path) -> int:
+    """Count lines in an existing JSONL file (for resume)."""
+    if not output_path.exists():
+        return 0
+    with open(output_path) as f:
+        return sum(1 for line in f if line.strip())
 
 
-async def run(output_path: Path) -> int:
+async def run(output_path: Path, *, resume: bool = False) -> int:
     """Main generation pipeline."""
     # Load v1 system prompt
     if not V1_PROMPT_PATH.exists():
@@ -292,37 +317,56 @@ async def run(output_path: Path) -> int:
                 key, _, val = line.partition("=")
                 os.environ.setdefault(key.strip(), val.strip())
 
-    # Get chunks from store (smart sampling — ~200 high-value chunks)
-    chunks = _get_chunks_from_store(max_chunks=200)
+    # Get chunks from store (all high-value + sampled context/legal)
+    chunks = _get_chunks_from_store(max_chunks=1000)
     logger.info("Loaded %d unique chunks from vector store", len(chunks))
 
     if not chunks:
         logger.error("No chunks in store — run ingest_oh_docs.py first")
         return 0
 
-    # Generate pairs
+    # Handle resume
+    start_index = 0
+    if resume:
+        existing = _count_existing_pairs(output_path)
+        if existing > 0:
+            # Estimate which chunk we were on (~2.5 pairs per chunk)
+            start_index = int(existing / 2.5)
+            logger.info(
+                "Resuming: %d existing pairs, starting from chunk ~%d",
+                existing, start_index,
+            )
+        else:
+            logger.info("No existing output found, starting fresh")
+    else:
+        # Clear any existing file for a fresh run
+        if output_path.exists():
+            output_path.unlink()
+
+    # Generate pairs (with incremental saving)
     generator = SyntheticDataGenerator(
         system_prompt=system_prompt,
         rate_limit_delay=1.5,  # Groq free tier is ~30 req/min
     )
 
     start = time.time()
-    pairs = await generator.generate_pairs_from_chunks(chunks)
+    pairs = await generator.generate_pairs_from_chunks(
+        chunks, output_path=output_path, start_index=start_index,
+    )
     elapsed = time.time() - start
 
+    total = _count_existing_pairs(output_path)
     logger.info(
-        "Generated %d pairs from %d chunks in %.1f minutes",
+        "Generated %d new pairs in %.1f minutes (%d total in file)",
         len(pairs),
-        len(chunks),
         elapsed / 60,
+        total,
     )
 
-    if pairs:
-        save_pairs(pairs, output_path)
-    else:
+    if total == 0:
         logger.error("No training pairs generated!")
 
-    return len(pairs)
+    return total
 
 
 def main() -> None:
@@ -335,9 +379,14 @@ def main() -> None:
         default=DEFAULT_OUTPUT,
         help="Output JSONL path (default: data/training/oh_sft_v1.jsonl)",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from existing output file instead of starting fresh",
+    )
     args = parser.parse_args()
 
-    count = asyncio.run(run(args.output))
+    count = asyncio.run(run(args.output, resume=args.resume))
     if count == 0:
         sys.exit(1)
     logger.info("Done ✓ — %d training pairs ready", count)
