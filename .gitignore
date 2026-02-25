@@ -55,3 +55,4 @@ data/interactions/
 # Environment
 .env
 .env.local
+planning/
