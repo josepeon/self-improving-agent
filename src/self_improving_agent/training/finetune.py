@@ -164,7 +164,6 @@ class FineTuner:
         data_dir = str(train_path.parent)  # dir containing train.jsonl
 
         def _train() -> None:
-            import mlx.nn as nn
             import mlx.optimizers as optim
             from mlx_lm import load
             from mlx_lm.tuner.datasets import CacheDataset, load_dataset
