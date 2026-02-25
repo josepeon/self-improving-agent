@@ -25,7 +25,7 @@ class TestLoRAConfig:
         assert cfg.alpha == 32
         assert cfg.num_epochs == 3
         assert cfg.learning_rate == 1e-4
-        assert "q_proj" in cfg.target_modules
+        assert "self_attn.q_proj" in cfg.target_modules
 
     def test_custom(self) -> None:
         cfg = LoRAConfig(rank=8, alpha=16, num_epochs=5)
