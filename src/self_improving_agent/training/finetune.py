@@ -31,7 +31,12 @@ class LoRAConfig:
     num_epochs: int = 3
     warmup_steps: int = 50
     target_modules: list[str] = field(
-        default_factory=lambda: ["q_proj", "v_proj", "k_proj", "o_proj"]
+        default_factory=lambda: [
+            "self_attn.q_proj",
+            "self_attn.k_proj",
+            "self_attn.v_proj",
+            "self_attn.o_proj",
+        ]
     )
 
 
@@ -147,22 +152,98 @@ class FineTuner:
 
         Imports ``mlx_lm`` lazily so the module works on non-macOS
         platforms (imports will fail gracefully when called).
+
+        Uses the current ``mlx_lm`` API: load model → apply LoRA →
+        build dataset → train with ``TrainingArgs``.
         """
         import asyncio
 
-        def _train() -> None:
-            from mlx_lm.tuner import train
+        # All MLX ops must happen on the same thread
+        base_model = self.base_model
+        config = self.config
+        data_dir = str(train_path.parent)  # dir containing train.jsonl
 
-            train(
-                model=self.base_model,
-                data=str(train_path),
-                adapter_path=str(adapter_path),
-                lora_rank=self.config.rank,
-                lora_alpha=self.config.alpha,
-                batch_size=self.config.batch_size,
-                learning_rate=self.config.learning_rate,
-                num_epochs=num_epochs,
+        def _train() -> None:
+            import mlx.nn as nn
+            import mlx.optimizers as optim
+            from mlx_lm import load
+            from mlx_lm.tuner.datasets import CacheDataset, load_dataset
+            from mlx_lm.tuner.trainer import TrainingArgs, train
+            from mlx_lm.tuner.utils import linear_to_lora_layers
+
+            # 1. Load model + tokenizer
+            model, tokenizer = load(base_model)
+
+            # 2. Apply LoRA layers
+            model.freeze()
+            lora_cfg = {
+                "rank": config.rank,
+                "scale": config.alpha / config.rank,
+                "dropout": config.dropout,
+                "keys": config.target_modules,
+            }
+            num_lora_layers = len(model.model.layers)  # all transformer blocks
+            linear_to_lora_layers(model, num_lora_layers, lora_cfg)
+            model.train()
+
+            # Count trainable params
+            import mlx.utils
+
+            n_params = sum(
+                v.size for _, v in mlx.utils.tree_flatten(model.trainable_parameters())
             )
+            logger.info("Trainable parameters: %s", f"{n_params:,}")
+
+            # 3. Load dataset  — needs an args-like namespace
+            class _DataArgs:
+                data = data_dir
+                train = True
+                test = False
+                hf_dataset = False
+                mask_prompt = False
+
+            train_set, valid_set, _ = load_dataset(_DataArgs(), tokenizer)
+            # Wrap in CacheDataset so iterate_batches gets processed tuples
+            train_set = CacheDataset(train_set) if train_set else train_set
+            if valid_set and len(valid_set) > 0:
+                valid_set = CacheDataset(valid_set)
+            logger.info("Training set: %d examples", len(train_set))
+
+            # 4. Calculate iterations from epochs
+            iters = max(1, num_epochs * len(train_set) // config.batch_size)
+
+            # 5. Build optimizer
+            lr_schedule = optim.cosine_decay(
+                config.learning_rate, iters, 1e-6
+            )
+            optimizer = optim.Adam(learning_rate=lr_schedule)
+
+            # 6. Set up training args
+            adapter_file = str(adapter_path / "adapters.safetensors")
+            Path(adapter_path).mkdir(parents=True, exist_ok=True)
+
+            args = TrainingArgs(
+                batch_size=config.batch_size,
+                iters=iters,
+                val_batches=0,
+                steps_per_report=10,
+                steps_per_eval=iters + 1,  # skip validation
+                steps_per_save=max(50, iters // 3),
+                max_seq_length=2048,
+                adapter_file=adapter_file,
+                grad_checkpoint=True,
+                grad_accumulation_steps=config.gradient_accumulation_steps,
+            )
+
+            # 7. Train (auto-saves final weights to adapter_file)
+            train(
+                model=model,
+                optimizer=optimizer,
+                train_dataset=train_set,
+                val_dataset=valid_set if valid_set and len(valid_set) > 0 else None,
+                args=args,
+            )
+            logger.info("Saved adapter weights to %s", adapter_file)
 
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, _train)

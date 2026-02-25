@@ -58,7 +58,8 @@ async def train_model(dataset: list[dict], version: str) -> str:
         rank=16,
         alpha=32,
         num_epochs=3,
-        batch_size=4,
+        batch_size=1,
+        gradient_accumulation_steps=8,
         learning_rate=1e-4,
     )
 
