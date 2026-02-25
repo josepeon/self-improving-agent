@@ -206,36 +206,62 @@ class SyntheticDataGenerator:
         return pairs
 
 
-def _get_chunks_from_store() -> list[dict[str, str]]:
-    """Read unique chunks from the ChromaDB store."""
+def _get_chunks_from_store(*, max_chunks: int = 200) -> list[dict[str, str]]:
+    """Read chunks from ChromaDB, sampling intelligently by category.
+
+    Takes ALL chunks from high-value categories (product, strategy,
+    project, persona, planning, go-to-market, release, overview) and
+    samples from large categories (context, legal) to stay within
+    budget.
+    """
+    import random
+
     import chromadb
 
     client = chromadb.PersistentClient(path=str(PERSIST_DIR))
     collection = client.get_collection("oh_knowledge")
 
-    # Get all documents
     results = collection.get(include=["documents", "metadatas"])
-    chunks: list[dict[str, str]] = []
-    seen_texts: set[str] = set()
-
     docs = results.get("documents") or []
     metas = results.get("metadatas") or []
 
+    # Bucket by category
+    HIGH_VALUE = {
+        "product", "strategy", "project", "persona",
+        "planning", "go-to-market", "release", "overview",
+    }
+    high: list[dict[str, str]] = []
+    low: list[dict[str, str]] = []
+    seen: set[str] = set()
+
     for doc, meta in zip(docs, metas):
-        # Skip very short chunks and duplicates
         if not doc or len(doc.strip()) < 50:
             continue
-        # Dedup by first 200 chars
         key = doc[:200]
-        if key in seen_texts:
+        if key in seen:
             continue
-        seen_texts.add(key)
+        seen.add(key)
 
-        chunks.append({
-            "text": doc,
-            "source": (meta or {}).get("source", ""),
-        })
+        entry = {"text": doc, "source": (meta or {}).get("source", "")}
+        category = (meta or {}).get("category", "")
+        if category in HIGH_VALUE:
+            high.append(entry)
+        else:
+            low.append(entry)
 
+    # Take all high-value, sample from low-value
+    budget = max_chunks - len(high)
+    if budget > 0 and low:
+        random.seed(42)  # reproducible
+        sampled_low = random.sample(low, min(budget, len(low)))
+    else:
+        sampled_low = []
+
+    chunks = high + sampled_low
+    logger.info(
+        "Selected %d chunks: %d high-value + %d sampled (from %d total)",
+        len(chunks), len(high), len(sampled_low), len(seen),
+    )
     return chunks
 
 
@@ -266,8 +292,8 @@ async def run(output_path: Path) -> int:
                 key, _, val = line.partition("=")
                 os.environ.setdefault(key.strip(), val.strip())
 
-    # Get chunks from store
-    chunks = _get_chunks_from_store()
+    # Get chunks from store (smart sampling — ~200 high-value chunks)
+    chunks = _get_chunks_from_store(max_chunks=200)
     logger.info("Loaded %d unique chunks from vector store", len(chunks))
 
     if not chunks:
