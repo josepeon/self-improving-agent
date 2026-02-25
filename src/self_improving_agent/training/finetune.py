@@ -235,7 +235,20 @@ class FineTuner:
                 grad_accumulation_steps=config.gradient_accumulation_steps,
             )
 
-            # 7. Train (auto-saves final weights to adapter_file)
+            # 7. Save adapter_config.json (required by mlx_lm.load for inference)
+            adapter_cfg_path = Path(adapter_path) / "adapter_config.json"
+            with open(adapter_cfg_path, "w") as f:
+                json.dump(
+                    {
+                        "fine_tune_type": "lora",
+                        "num_layers": num_lora_layers,
+                        "lora_parameters": lora_cfg,
+                    },
+                    f,
+                    indent=2,
+                )
+
+            # 8. Train (auto-saves final weights to adapter_file)
             train(
                 model=model,
                 optimizer=optimizer,
@@ -255,12 +268,15 @@ class FineTuner:
         adapter_path: str | Path,
         prompt: str,
         *,
+        system_prompt: str | None = None,
         max_tokens: int = 512,
     ) -> str:
         """Generate text using base model + LoRA adapter.
 
         Useful for evaluating a freshly-trained adapter before
-        promoting it.
+        promoting it.  When *system_prompt* is provided the prompt
+        is formatted through the tokenizer's chat template so the
+        model sees the same structure it was fine-tuned on.
         """
         import asyncio
 
@@ -271,10 +287,22 @@ class FineTuner:
                 self.base_model,
                 adapter_path=str(adapter_path),
             )
+
+            if system_prompt and hasattr(tokenizer, "apply_chat_template"):
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ]
+                formatted = tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
+            else:
+                formatted = prompt
+
             return generate(
                 model,
                 tokenizer,
-                prompt=prompt,
+                prompt=formatted,
                 max_tokens=max_tokens,
             )
 

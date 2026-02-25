@@ -81,6 +81,15 @@ async def evaluate_model(adapter_path: str) -> dict:
 
     finetuner = FineTuner(base_model=BASE_MODEL)
 
+    # Load the OH system prompt used during training
+    prompts_path = PROJECT_ROOT.parent / "oh-companion-backend" / "prompts" / "v1.txt"
+    system_prompt = ""
+    if prompts_path.exists():
+        system_prompt = prompts_path.read_text().strip()
+        logger.info("Loaded system prompt from %s (%d chars)", prompts_path.name, len(system_prompt))
+    else:
+        logger.warning("System prompt not found at %s — evaluating without it", prompts_path)
+
     test_questions = [
         "What is OH?",
         "What does O-OH do?",
@@ -94,11 +103,11 @@ async def evaluate_model(adapter_path: str) -> dict:
 
     for q in test_questions:
         answer = await finetuner.generate_with_adapter(
-            adapter_path, q, max_tokens=150
+            adapter_path, q, system_prompt=system_prompt, max_tokens=200
         )
         results[q] = answer
         logger.info("  Q: %s", q)
-        logger.info("  A: %s", answer[:120])
+        logger.info("  A: %s", answer[:200])
         logger.info("")
 
     return results
