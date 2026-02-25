@@ -212,9 +212,7 @@ class FineTuner:
             iters = max(1, num_epochs * len(train_set) // config.batch_size)
 
             # 5. Build optimizer
-            lr_schedule = optim.cosine_decay(
-                config.learning_rate, iters, 1e-6
-            )
+            lr_schedule = optim.cosine_decay(config.learning_rate, iters, 1e-6)
             optimizer = optim.Adam(learning_rate=lr_schedule)
 
             # 6. Set up training args
