@@ -39,9 +39,9 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 ZEROZERO = PROJECT_ROOT.parent
 
 V1_PROMPT_PATH = ZEROZERO / "oh-companion-backend" / "prompts" / "v1.txt"
-ADAPTER_PATH = PROJECT_ROOT / "models" / "finetuned" / "v1.0-oh" / "adapters"
+ADAPTER_PATH = PROJECT_ROOT / "models" / "finetuned" / "v1.1-oh" / "adapters"
 BASE_MODEL = "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"
-DEFAULT_OUTPUT = PROJECT_ROOT / "data" / "training" / "oh_conversations_v1.jsonl"
+DEFAULT_OUTPUT = PROJECT_ROOT / "data" / "training" / "oh_conversations_v2.jsonl"
 PERSIST_DIR = PROJECT_ROOT / "data" / "oh_knowledge"
 
 JUDGE_THRESHOLD = 7  # minimum score to keep a conversation
@@ -515,7 +515,17 @@ def main() -> None:
         action="store_true",
         help="Resume from existing output",
     )
+    parser.add_argument(
+        "--adapter",
+        type=Path,
+        default=ADAPTER_PATH,
+        help=f"Path to adapter directory (default: {ADAPTER_PATH})",
+    )
     args = parser.parse_args()
+
+    # Override global adapter path if specified
+    global ADAPTER_PATH
+    ADAPTER_PATH = args.adapter
 
     count = asyncio.run(run(args.output, rounds=args.rounds, resume=args.resume))
     if count == 0:
