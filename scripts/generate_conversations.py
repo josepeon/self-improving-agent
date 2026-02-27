@@ -397,7 +397,13 @@ def _count_existing(path: Path) -> int:
 # ── Main pipeline ────────────────────────────────────────────────────
 
 
-async def run(output_path: Path, *, rounds: int = 200, resume: bool = False) -> int:
+async def run(
+    output_path: Path,
+    *,
+    rounds: int = 200,
+    resume: bool = False,
+    adapter_path: Path = ADAPTER_PATH,
+) -> int:
     """Generate conversations, judge them, keep the good ones."""
     # Load system prompt
     if not V1_PROMPT_PATH.exists():
@@ -416,9 +422,9 @@ async def run(output_path: Path, *, rounds: int = 200, resume: bool = False) -> 
                 os.environ.setdefault(key.strip(), val.strip())
 
     # Check adapter exists
-    if not ADAPTER_PATH.exists():
+    if not adapter_path.exists():
         logger.error(
-            "Adapter not found at %s — run train_oh_model.py first", ADAPTER_PATH
+            "Adapter not found at %s — run train_oh_model.py first", adapter_path
         )
         sys.exit(1)
 
@@ -445,6 +451,7 @@ async def run(output_path: Path, *, rounds: int = 200, resume: bool = False) -> 
     # Generator
     generator = ConversationGenerator(
         system_prompt=system_prompt,
+        adapter_path=adapter_path,
         rate_limit_delay=1.5,
     )
 
@@ -523,11 +530,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Override global adapter path if specified
-    global ADAPTER_PATH
-    ADAPTER_PATH = args.adapter
-
-    count = asyncio.run(run(args.output, rounds=args.rounds, resume=args.resume))
+    count = asyncio.run(
+        run(
+            args.output,
+            rounds=args.rounds,
+            resume=args.resume,
+            adapter_path=args.adapter,
+        )
+    )
     if count == 0:
         sys.exit(1)
     logger.info("Done ✓ — %d quality conversations ready for training", count)
