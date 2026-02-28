@@ -175,6 +175,43 @@ def extract_sia_entries(raw_lines: list[str]) -> list[dict]:
     return entries
 
 
+# Patterns that indicate an internal system call, not a real user message.
+_INTERNAL_MESSAGE_PREFIXES = (
+    "Analyze this conversation exchange",
+    "Extract ",
+    "Summarize this conversation",
+)
+
+
+def filter_real_interactions(entries: list[dict]) -> list[dict]:
+    """Filter out internal system calls (e.g. fact-extraction).
+
+    The companion fires secondary LLM calls (like fact-extraction) that
+    also get logged.  These are NOT real user interactions and would
+    pollute training data if included.
+
+    Args:
+        entries: Raw SIA log entries.
+
+    Returns:
+        Only entries that represent genuine user interactions.
+    """
+    real = []
+    filtered = 0
+
+    for entry in entries:
+        user_msg = entry.get("user_message", "")
+        if any(user_msg.startswith(prefix) for prefix in _INTERNAL_MESSAGE_PREFIXES):
+            filtered += 1
+            continue
+        real.append(entry)
+
+    if filtered:
+        print(f"  Filtered {filtered} internal system calls")
+
+    return real
+
+
 def deduplicate_entries(
     new_entries: list[dict],
     existing_file: Path,
@@ -346,23 +383,27 @@ def main():
     print(f"  Retrieved {len(raw_lines)} raw log lines")
 
     # Step 2: Extract SIA entries
-    print("\n[2/3] Extracting SIA interactions...")
+    print("\n[2/4] Extracting SIA interactions...")
     entries = extract_sia_entries(raw_lines)
+
+    # Step 3: Filter out internal system calls
+    print("\n[3/4] Filtering internal system calls...")
+    entries = filter_real_interactions(entries)
     print_summary(entries)
 
     if not entries:
         print("\nDone — nothing to sync.")
         return
 
-    # Step 3: Save locally
+    # Step 4: Save locally
     if args.dry_run:
         print(
-            f"\n[3/3] DRY RUN — would save {len(entries)} entries to {args.output_dir}/"
+            f"\n[4/4] DRY RUN — would save {len(entries)} entries to {args.output_dir}/"
         )
         print("\nSample entry:")
         print(json.dumps(entries[0], indent=2, ensure_ascii=False))
     else:
-        print(f"\n[3/3] Saving to {args.output_dir}/...")
+        print(f"\n[4/4] Saving to {args.output_dir}/...")
         files_written = save_entries(entries, args.output_dir)
         if files_written:
             for fpath, count in files_written:

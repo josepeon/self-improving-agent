@@ -64,6 +64,12 @@ ignore = [
     "E501",  # line too long (handled by formatter)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Tests that import scripts need sys.path manipulation before imports
+"tests/test_sync_logs.py" = ["I001"]
+"tests/test_prepare_real_data.py" = ["I001"]
+"tests/test_improvement_cycle.py" = ["I001"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["self_improving_agent"]
 

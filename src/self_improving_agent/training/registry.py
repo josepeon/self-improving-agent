@@ -43,6 +43,9 @@ class ModelVersion:
     evaluation_report_path: str | None = None
     evaluation_pass_rate: float | None = None
     status: str = ModelStatus.TRAINING
+    # Lineage tracking: what data sources contributed to this version
+    data_sources: dict[str, Any] = field(default_factory=dict)
+    parent_version: str | None = None
 
     # ── Serialisation helpers ─────────────────────────────────────────
 
