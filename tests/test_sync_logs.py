@@ -37,7 +37,7 @@ class TestFilterRealInteractions:
         entries = [
             {
                 "timestamp": "2026-02-28T14:31:30.989814+00:00",
-                "user_message": 'Analyze this conversation exchange and extract any factual information about the user.\nOnly extract facts...',
+                "user_message": "Analyze this conversation exchange and extract any factual information about the user.\nOnly extract facts...",
                 "assistant_response": "[]",
                 "model": "llama-3.3-70b-versatile",
             }
@@ -102,7 +102,10 @@ class TestExtractSiaEntries:
     def test_railway_json_format(self) -> None:
         entry = {"user_message": "Hello", "assistant_response": "Hi!"}
         railway_line = json.dumps(
-            {"message": f"SIA_LOG:{json.dumps(entry)}", "timestamp": "2026-02-28T00:00:00Z"}
+            {
+                "message": f"SIA_LOG:{json.dumps(entry)}",
+                "timestamp": "2026-02-28T00:00:00Z",
+            }
         )
         result = extract_sia_entries([railway_line])
         assert len(result) == 1
@@ -136,9 +139,7 @@ class TestExtractSiaEntries:
             {"user_message": f"msg{i}", "assistant_response": f"resp{i}"}
             for i in range(5)
         ]
-        lines = [
-            json.dumps({"message": f"SIA_LOG:{json.dumps(e)}"}) for e in entries
-        ]
+        lines = [json.dumps({"message": f"SIA_LOG:{json.dumps(e)}"}) for e in entries]
         result = extract_sia_entries(lines)
         assert len(result) == 5
 
