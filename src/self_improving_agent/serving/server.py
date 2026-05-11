@@ -28,7 +28,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import StreamingResponse
 
 from self_improving_agent.feedback.store import (
@@ -36,6 +36,7 @@ from self_improving_agent.feedback.store import (
     FeedbackRating,
     FeedbackStore,
 )
+from self_improving_agent.observability.metrics import make_sia_registry
 from self_improving_agent.providers.base import GenerationConfig
 from self_improving_agent.serving.models import (
     ChatCompletionChoice,
@@ -73,6 +74,7 @@ class ServerState:
         self.registry_path = Path(registry_path)
         self.registry = ModelRegistry(self.registry_path)
         self.feedback = FeedbackStore(feedback_path)
+        self.metrics_registry, self.metrics = make_sia_registry()
         self._provider: Any | None = None
         self._loaded_version: str | None = None
         self._mtime: float = 0.0
@@ -182,6 +184,20 @@ def _make_app() -> FastAPI:
     async def healthz() -> dict:
         # Liveness only — does not block on model load
         return {"status": "ok"}
+
+    @app.get("/metrics")
+    async def metrics_endpoint():
+        """Prometheus-format metrics. Standard scrape endpoint."""
+        state: ServerState = app.state.sia
+        # Refresh the version gauge to reflect the currently-loaded model
+        if state.loaded_version:
+            state.metrics["version_info"].set(
+                1, version=state.loaded_version, status="loaded"
+            )
+        return Response(
+            content=state.metrics_registry.render(),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
 
     @app.get("/v1/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
