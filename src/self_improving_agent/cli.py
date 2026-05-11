@@ -17,6 +17,7 @@ from self_improving_agent.commands import (
     dashboard,
     eval_validate,
     evaluate,
+    merge,
     serve,
     status,
     train,
@@ -85,6 +86,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     dashboard.add_arguments(dashboard_p)
     dashboard_p.set_defaults(func=dashboard.run)
+
+    merge_p = subparsers.add_parser(
+        "merge",
+        help="Weighted-sum merge of N LoRA adapters into a new adapter",
+    )
+    merge.add_arguments(merge_p)
+    merge_p.set_defaults(func=merge.run)
 
     return parser
 
