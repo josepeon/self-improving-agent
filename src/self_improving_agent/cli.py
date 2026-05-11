@@ -13,7 +13,13 @@ import argparse
 import logging
 import sys
 
-from self_improving_agent.commands import evaluate, serve, status, train
+from self_improving_agent.commands import (
+    eval_validate,
+    evaluate,
+    serve,
+    status,
+    train,
+)
 
 __version__ = "0.1.0"
 
@@ -64,6 +70,13 @@ def build_parser() -> argparse.ArgumentParser:
     serve_p = subparsers.add_parser("serve", help="Start the inference HTTP server")
     serve.add_arguments(serve_p)
     serve_p.set_defaults(func=serve.run)
+
+    eval_validate_p = subparsers.add_parser(
+        "eval-validate",
+        help="Sanity-check the eval pipeline (used in CI; no inference required)",
+    )
+    eval_validate.add_arguments(eval_validate_p)
+    eval_validate_p.set_defaults(func=eval_validate.run)
 
     return parser
 
