@@ -31,6 +31,11 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 
+from self_improving_agent.feedback.store import (
+    Feedback,
+    FeedbackRating,
+    FeedbackStore,
+)
 from self_improving_agent.providers.base import GenerationConfig
 from self_improving_agent.serving.models import (
     ChatCompletionChoice,
@@ -41,6 +46,8 @@ from self_improving_agent.serving.models import (
     ChatCompletionStreamChoice,
     ChatMessage,
     CompletionUsage,
+    FeedbackRequest,
+    FeedbackResponse,
     HealthResponse,
 )
 from self_improving_agent.training.registry import ModelRegistry, ModelVersion
@@ -58,9 +65,14 @@ REGISTRY_POLL_SECONDS = 30
 class ServerState:
     """Owned process state — registry, current provider, last-mtime watcher."""
 
-    def __init__(self, registry_path: str | Path) -> None:
+    def __init__(
+        self,
+        registry_path: str | Path,
+        feedback_path: str | Path = "data/feedback/feedback.jsonl",
+    ) -> None:
         self.registry_path = Path(registry_path)
         self.registry = ModelRegistry(self.registry_path)
+        self.feedback = FeedbackStore(feedback_path)
         self._provider: Any | None = None
         self._loaded_version: str | None = None
         self._mtime: float = 0.0
@@ -137,7 +149,12 @@ def _build_provider(version: ModelVersion) -> Any:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    state = ServerState(os.environ.get("SIA_REGISTRY_PATH", "models/registry.json"))
+    state = ServerState(
+        registry_path=os.environ.get("SIA_REGISTRY_PATH", "models/registry.json"),
+        feedback_path=os.environ.get(
+            "SIA_FEEDBACK_PATH", "data/feedback/feedback.jsonl"
+        ),
+    )
     app.state.sia = state
 
     # Kick off the registry watcher — but don't block startup if no model is
@@ -191,6 +208,35 @@ def _make_app() -> FastAPI:
                 }
                 for v in versions
             ],
+        }
+
+    @app.post("/v1/feedback", response_model=FeedbackResponse)
+    async def submit_feedback(request: FeedbackRequest) -> FeedbackResponse:
+        """Record operator/user feedback on a production response.
+
+        The interaction_id should be the id of the original /v1/chat/completions
+        response. Submitting the same (interaction_id, rating, correction)
+        triple twice is a no-op.
+        """
+        state: ServerState = app.state.sia
+        feedback = Feedback(
+            interaction_id=request.interaction_id,
+            rating=FeedbackRating(request.rating),
+            user_message=request.user_message,
+            original_response=request.original_response,
+            correction=request.correction,
+            model_version=request.model_version,
+            metadata=request.metadata or {},
+        )
+        accepted = state.feedback.add(feedback)
+        return FeedbackResponse(id=feedback.id, accepted=accepted)
+
+    @app.get("/v1/feedback/stats")
+    async def feedback_stats() -> dict:
+        state: ServerState = app.state.sia
+        return {
+            "totals": state.feedback.counts_by_rating(),
+            "by_version": state.feedback.counts_by_version(),
         }
 
     @app.post("/v1/chat/completions")

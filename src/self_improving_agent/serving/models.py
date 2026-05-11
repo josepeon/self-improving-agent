@@ -107,3 +107,25 @@ class HealthResponse(BaseModel):
     model: str | None = None
     version: str = "0.1.0"
     routing: dict | None = None
+
+
+# ---------------------------------------------------------------------
+# Feedback (T2.2)
+# ---------------------------------------------------------------------
+
+
+class FeedbackRequest(BaseModel):
+    """Operator/user feedback on a production response."""
+
+    interaction_id: str
+    rating: Literal["good", "bad"]
+    user_message: str
+    original_response: str
+    correction: str | None = None
+    model_version: str | None = None
+    metadata: dict | None = None
+
+
+class FeedbackResponse(BaseModel):
+    id: str
+    accepted: bool  # False means it was a duplicate
