@@ -37,6 +37,11 @@ rag = [
     "chromadb>=0.5.0",
     "sentence-transformers>=3.0",
 ]
+serving = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.30",
+    "sse-starlette>=2.1",
+]
 
 [project.scripts]
 sia = "self_improving_agent.cli:main"
