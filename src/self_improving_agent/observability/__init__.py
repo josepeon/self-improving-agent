@@ -6,9 +6,11 @@ from self_improving_agent.observability.cost_tracker import (
     ModelPrice,
     UsageRecord,
     UsageTotals,
+    attribute,
     begin_run,
     get_tracker,
     record_usage,
+    register_price,
     render_summary,
     to_dict,
 )
@@ -19,9 +21,11 @@ __all__ = [
     "ModelPrice",
     "UsageRecord",
     "UsageTotals",
+    "attribute",
     "begin_run",
     "get_tracker",
     "record_usage",
+    "register_price",
     "render_summary",
     "to_dict",
 ]

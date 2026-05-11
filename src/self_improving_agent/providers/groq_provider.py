@@ -107,6 +107,9 @@ class GroqProvider(BaseModelProvider):
         completion_tokens = response.usage.completion_tokens if response.usage else 0
 
         # Record for the per-run cost tracker. No-op if observability isn't used.
+        # ``record_usage`` reads the active ``attribute()`` context, so callers
+        # that scoped their call get correct role attribution; the rest land
+        # in "unknown".
         if response.usage is not None:
             try:
                 record_usage(

@@ -28,7 +28,9 @@ Usage:
 
 from __future__ import annotations
 
+import contextvars
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Iterator
 
@@ -76,6 +78,16 @@ def get_price(provider: str, model: str) -> ModelPrice | None:
     return None
 
 
+def register_price(provider: str, model: str, price: ModelPrice) -> None:
+    """Add a (provider, model) → price entry to the global table.
+
+    Downstream packages (e.g. multi_agent_planner) call this on import to
+    register provider/model combinations SIA itself doesn't ship pricing
+    for. Use ``model="*"`` for a provider-wide fallback.
+    """
+    _DEFAULT_PRICES[(provider, model)] = price
+
+
 # ===========================================
 # Data model
 # ===========================================
@@ -89,6 +101,11 @@ class UsageRecord:
     completion_tokens: int
     cost_usd: float
     priced: bool  # False if we had no rate card
+    # Attribution: which subsystem made this call. Defaults to whatever
+    # the active ``attribute()`` context is, or ``"unknown"``. Used by
+    # multi_agent_planner to break down costs per agent role; used by
+    # SIA itself to separate eval / distillation / serving traffic.
+    agent_role: str = "unknown"
 
 
 @dataclass
@@ -147,6 +164,7 @@ class CostTracker:
         model: str,
         prompt_tokens: int,
         completion_tokens: int,
+        agent_role: str | None = None,
     ) -> UsageRecord:
         price = get_price(provider, model)
         if price is None:
@@ -163,6 +181,7 @@ class CostTracker:
             completion_tokens=completion_tokens,
             cost_usd=cost,
             priced=priced,
+            agent_role=agent_role or _current_role.get(),
         )
         with self._lock:
             self._records.append(record)
@@ -194,6 +213,13 @@ class CostTracker:
             out.setdefault(key, UsageTotals()).add(record)
         return out
 
+    def by_agent(self) -> dict[str, UsageTotals]:
+        """{agent_role: totals} — breakdown by who issued the call."""
+        out: dict[str, UsageTotals] = {}
+        for record in self.all_records():
+            out.setdefault(record.agent_role, UsageTotals()).add(record)
+        return out
+
     # ----- run lifecycle -----
 
     def reset(self) -> None:
@@ -210,6 +236,9 @@ class CostTracker:
 # ===========================================
 
 _tracker = CostTracker()
+_current_role: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "agent_role", default="unknown"
+)
 
 
 def get_tracker() -> CostTracker:
@@ -221,8 +250,28 @@ def record_usage(
     model: str,
     prompt_tokens: int,
     completion_tokens: int,
+    agent_role: str | None = None,
 ) -> UsageRecord:
-    return _tracker.record(provider, model, prompt_tokens, completion_tokens)
+    return _tracker.record(
+        provider, model, prompt_tokens, completion_tokens, agent_role
+    )
+
+
+@contextmanager
+def attribute(role: str) -> Iterator[None]:
+    """Scope subsequent ``record_usage`` calls to ``role``.
+
+    Nested contexts honor the innermost role. Use this to break down
+    cost by subsystem:
+
+        with attribute("planner"):
+            ... LLM calls here are attributed to "planner" ...
+    """
+    token = _current_role.set(role)
+    try:
+        yield
+    finally:
+        _current_role.reset(token)
 
 
 def begin_run(budget_usd: float | None = None) -> None:
@@ -254,6 +303,18 @@ def render_summary(tracker: CostTracker | None = None) -> str:
         f"= {totals.total_tokens:,} tokens, {totals.calls} call(s))",
     ]
 
+    by_agent = tracker.by_agent()
+    # Only render the agent block when attribution was actually used —
+    # all-"unknown" means nobody scoped their calls and the line would
+    # just duplicate the total.
+    if by_agent and not (len(by_agent) == 1 and "unknown" in by_agent):
+        lines.append("  by agent:")
+        for role, t in sorted(by_agent.items(), key=lambda kv: -kv[1].cost_usd):
+            lines.append(
+                f"    {role:<16} {t.calls:>3} call(s)  "
+                f"{t.total_tokens:>7,} tok  ${t.cost_usd:.4f}"
+            )
+
     by_model = tracker.by_model()
     if len(by_model) > 1:
         lines.append("  by model:")
@@ -276,5 +337,6 @@ def to_dict(tracker: CostTracker | None = None) -> dict:
     tracker = tracker or _tracker
     return {
         "total": tracker.total().as_dict(),
+        "by_agent": {role: t.as_dict() for role, t in tracker.by_agent().items()},
         "by_model": {key: t.as_dict() for key, t in tracker.by_model().items()},
     }

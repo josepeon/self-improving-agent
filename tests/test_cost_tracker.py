@@ -10,6 +10,7 @@ from self_improving_agent.observability.cost_tracker import (
     BudgetExceededError,
     CostTracker,
     ModelPrice,
+    attribute,
     begin_run,
     get_price,
     get_tracker,
@@ -122,6 +123,76 @@ class TestReporting:
     def test_unpriced_flagged_in_summary(self):
         record_usage("madeup", "madeup", 100, 100)
         assert "no rate card" in render_summary()
+
+
+class TestAttribution:
+    """T-cross-repo: per-role attribution via the attribute() context manager."""
+
+    def test_default_role_is_unknown(self):
+        rec = record_usage("groq", "llama-3.3-70b-versatile", 10, 5)
+        assert rec.agent_role == "unknown"
+
+    def test_attribute_context_sets_role(self):
+        with attribute("planner"):
+            rec = record_usage("groq", "llama-3.3-70b-versatile", 10, 5)
+        assert rec.agent_role == "planner"
+
+    def test_explicit_agent_role_kwarg_wins(self):
+        with attribute("planner"):
+            rec = record_usage(
+                "groq", "llama-3.3-70b-versatile", 10, 5,
+                agent_role="explicit-override",
+            )
+        assert rec.agent_role == "explicit-override"
+
+    def test_nested_attribute_innermost_wins(self):
+        with attribute("outer"):
+            with attribute("inner"):
+                rec = record_usage("groq", "llama-3.3-70b-versatile", 10, 5)
+        assert rec.agent_role == "inner"
+
+    def test_context_resets_after_exit(self):
+        with attribute("temp-role"):
+            pass
+        rec = record_usage("groq", "llama-3.3-70b-versatile", 10, 5)
+        assert rec.agent_role == "unknown"
+
+    def test_by_agent_breakdown(self):
+        with attribute("planner"):
+            record_usage("groq", "llama-3.3-70b-versatile", 100, 50)
+            record_usage("groq", "llama-3.3-70b-versatile", 100, 50)
+        with attribute("developer"):
+            record_usage("openai", "gpt-4o", 200, 100)
+
+        by_agent = get_tracker().by_agent()
+        assert by_agent["planner"].calls == 2
+        assert by_agent["planner"].prompt_tokens == 200
+        assert by_agent["developer"].calls == 1
+        assert by_agent["developer"].prompt_tokens == 200
+
+    def test_summary_includes_by_agent_block(self):
+        with attribute("planner"):
+            record_usage("openai", "gpt-4o", 100, 50)
+        with attribute("developer"):
+            record_usage("openai", "gpt-4o", 200, 100)
+
+        out = render_summary()
+        assert "by agent:" in out
+        assert "planner" in out
+        assert "developer" in out
+
+    def test_summary_skips_by_agent_when_only_unknown(self):
+        # No attribute() scope -> only "unknown" role -> redundant breakdown
+        record_usage("openai", "gpt-4o", 100, 50)
+        out = render_summary()
+        assert "by agent:" not in out
+
+    def test_to_dict_includes_by_agent(self):
+        with attribute("planner"):
+            record_usage("groq", "llama-3.3-70b-versatile", 10, 5)
+        snap = to_dict()
+        assert "by_agent" in snap
+        assert "planner" in snap["by_agent"]
 
 
 class TestThreadSafety:
