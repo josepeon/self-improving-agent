@@ -22,6 +22,20 @@ logger = logging.getLogger(__name__)
 DEFAULT_MLX_MODEL = "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"
 
 
+def _make_sampler(temperature: float, top_p: float):
+    """Build an mlx-lm sampler if the newer API is available; else return None.
+
+    mlx-lm < 0.20 took temp= / top_p= as direct kwargs to generate().
+    mlx-lm >= 0.20 dropped them and expects a sampler= callable. We
+    detect at call time so the provider works on both versions.
+    """
+    try:
+        from mlx_lm.sample_utils import make_sampler
+    except ImportError:
+        return None
+    return make_sampler(temp=temperature, top_p=top_p)
+
+
 class MLXProvider(BaseModelProvider):
     """Local MLX provider for Apple Silicon inference.
 
@@ -108,18 +122,26 @@ class MLXProvider(BaseModelProvider):
         try:
             from mlx_lm import generate as mlx_generate
 
-            # Run blocking generation in a thread
+            # mlx-lm renamed temp/top_p into a sampler in 0.20+. We build the
+            # sampler when available and fall back to the legacy kwargs
+            # signature when it isn't, so the provider works on both.
+            sampler = _make_sampler(config.temperature, config.top_p)
+            generate_kwargs: dict = {
+                "model": self._model,
+                "tokenizer": self._tokenizer,
+                "prompt": prompt,
+                "max_tokens": config.max_tokens,
+            }
+            if sampler is not None:
+                generate_kwargs["sampler"] = sampler
+            else:
+                generate_kwargs["temp"] = config.temperature
+                generate_kwargs["top_p"] = config.top_p
+
             loop = asyncio.get_event_loop()
             response_text = await loop.run_in_executor(
                 None,
-                lambda: mlx_generate(
-                    self._model,
-                    self._tokenizer,
-                    prompt=prompt,
-                    max_tokens=config.max_tokens,
-                    temp=config.temperature,
-                    top_p=config.top_p,
-                ),
+                lambda: mlx_generate(**generate_kwargs),
             )
         except Exception as e:
             logger.error("MLX generation failed: %s", e)
@@ -179,27 +201,41 @@ class MLXProvider(BaseModelProvider):
         )
 
         try:
-            from mlx_lm.utils import stream_generate
+            # mlx-lm 0.20+ exports stream_generate at the top level;
+            # older versions had it under .utils. Try both.
+            try:
+                from mlx_lm import stream_generate
+            except ImportError:
+                from mlx_lm.utils import stream_generate
 
             # stream_generate is a synchronous generator — wrap it
             loop = asyncio.get_event_loop()
             queue: asyncio.Queue[str | None] = asyncio.Queue()
 
+            sampler = _make_sampler(config.temperature, config.top_p)
+            stream_kwargs: dict = {
+                "model": self._model,
+                "tokenizer": self._tokenizer,
+                "prompt": prompt,
+                "max_tokens": config.max_tokens,
+            }
+            if sampler is not None:
+                stream_kwargs["sampler"] = sampler
+            else:
+                stream_kwargs["temp"] = config.temperature
+
             def _stream_worker() -> None:
                 try:
-                    for response in stream_generate(
-                        self._model,
-                        self._tokenizer,
-                        prompt=prompt,
-                        max_tokens=config.max_tokens,
-                        temp=config.temperature,
-                    ):
-                        # mlx_lm stream_generate yields GenerateStepOutput
-                        token = (
-                            response.token_string
-                            if hasattr(response, "token_string")
-                            else str(response)
-                        )
+                    for response in stream_generate(**stream_kwargs):
+                        # mlx-lm yields differently-shaped objects across
+                        # versions: 0.20+ has .text, older versions had
+                        # .token_string, very old yields raw strings.
+                        if hasattr(response, "text"):
+                            token = response.text
+                        elif hasattr(response, "token_string"):
+                            token = response.token_string
+                        else:
+                            token = str(response)
                         asyncio.run_coroutine_threadsafe(queue.put(token), loop)
                 finally:
                     asyncio.run_coroutine_threadsafe(
