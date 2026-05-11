@@ -65,7 +65,8 @@ class TestMLXProviderGenerate:
             assert response.text == "Hello there!"
             assert response.provider == "mlx"
             assert response.model == "test-model"
-            assert response.tokens_used == 5  # Mocked tokenizer encodes to 5 tokens
+            # Tokenizer encodes prompt AND response (5 each in this mock)
+            assert response.tokens_used == 10
             assert response.latency_ms > 0
             assert response.is_fallback is False
 

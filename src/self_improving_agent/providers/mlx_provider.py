@@ -10,6 +10,7 @@ import os
 import time
 from collections.abc import AsyncGenerator
 
+from self_improving_agent.observability.cost_tracker import record_usage
 from self_improving_agent.providers.base import (
     BaseModelProvider,
     GenerationConfig,
@@ -125,7 +126,21 @@ class MLXProvider(BaseModelProvider):
             raise
 
         latency_ms = (time.perf_counter() - start) * 1000
-        tokens_used = len(self._tokenizer.encode(response_text))
+        prompt_tokens = len(self._tokenizer.encode(prompt))
+        completion_tokens = len(self._tokenizer.encode(response_text))
+        tokens_used = prompt_tokens + completion_tokens
+
+        # Cost is $0 for local MLX but the call still counts towards token
+        # totals — useful for budget-vs-latency analysis.
+        try:
+            record_usage(
+                provider="mlx",
+                model=self._model_path,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
         logger.debug(
             "MLX response: model=%s tokens=%d latency=%.1fms",

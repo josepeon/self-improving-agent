@@ -5,6 +5,7 @@ import os
 import time
 from collections.abc import AsyncGenerator
 
+from self_improving_agent.observability.cost_tracker import record_usage
 from self_improving_agent.providers.base import (
     BaseModelProvider,
     GenerationConfig,
@@ -102,6 +103,20 @@ class GroqProvider(BaseModelProvider):
         choice = response.choices[0]
         text = choice.message.content or ""
         tokens_used = response.usage.total_tokens if response.usage else 0
+        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+        completion_tokens = response.usage.completion_tokens if response.usage else 0
+
+        # Record for the per-run cost tracker. No-op if observability isn't used.
+        if response.usage is not None:
+            try:
+                record_usage(
+                    provider="groq",
+                    model=self._model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                )
+            except Exception:  # noqa: BLE001 — cost tracking must never break inference
+                pass
 
         logger.debug(
             "Groq response: model=%s tokens=%d latency=%.1fms",
@@ -118,10 +133,8 @@ class GroqProvider(BaseModelProvider):
             tokens_used=tokens_used,
             metadata={
                 "finish_reason": choice.finish_reason,
-                "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
-                "completion_tokens": response.usage.completion_tokens
-                if response.usage
-                else 0,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
             },
         )
 
