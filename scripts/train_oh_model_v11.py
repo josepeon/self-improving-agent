@@ -193,7 +193,18 @@ def main() -> None:
         default=DEFAULT_VERSION,
         help="Model version tag (default: v1.1-oh)",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed (default: 42 or $SIA_SEED).",
+    )
     args = parser.parse_args()
+
+    from self_improving_agent.reproducibility import get_seed_from_env, set_seed
+
+    set_seed(args.seed if args.seed is not None else get_seed_from_env())
+
     asyncio.run(run(args.sft, args.conversations, args.version))
 
 

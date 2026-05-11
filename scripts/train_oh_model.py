@@ -196,7 +196,19 @@ def main() -> None:
         default=DEFAULT_VERSION,
         help="Model version tag (default: v1.0-oh)",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed (default: 42 or $SIA_SEED).",
+    )
     args = parser.parse_args()
+
+    # Pin every RNG SIA touches before any data shuffling or weight init.
+    from self_improving_agent.reproducibility import get_seed_from_env, set_seed
+
+    seed = args.seed if args.seed is not None else get_seed_from_env()
+    set_seed(seed)
 
     asyncio.run(run(args.dataset, args.version))
 
