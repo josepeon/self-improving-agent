@@ -14,6 +14,7 @@ import logging
 import sys
 
 from self_improving_agent.commands import (
+    compare,
     dashboard,
     eval_validate,
     evaluate,
@@ -93,6 +94,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     merge.add_arguments(merge_p)
     merge_p.set_defaults(func=merge.run)
+
+    compare_p = subparsers.add_parser(
+        "compare-bases",
+        help="Head-to-head evaluation of multiple base models on the same suite",
+    )
+    compare.add_arguments(compare_p)
+    compare_p.set_defaults(func=compare.run)
 
     return parser
 

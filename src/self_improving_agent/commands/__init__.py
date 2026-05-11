@@ -5,6 +5,7 @@ Each module exposes a ``run(args)`` callable returning an exit code.
 """
 
 from self_improving_agent.commands import (
+    compare,
     dashboard,
     eval_validate,
     evaluate,
@@ -15,6 +16,7 @@ from self_improving_agent.commands import (
 )
 
 __all__ = [
+    "compare",
     "dashboard",
     "eval_validate",
     "evaluate",

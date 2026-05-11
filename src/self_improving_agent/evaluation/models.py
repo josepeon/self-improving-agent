@@ -33,6 +33,9 @@ class EvaluationReport:
     avg_latency_ms: float = 0.0
     category_scores: dict[str, float] = field(default_factory=dict)
     results: list[TestResult] = field(default_factory=list)
+    # T2.5: identify the base model so reports comparing different bases
+    # (Llama vs Qwen vs DeepSeek) stay separable in the dashboard.
+    base_model: str | None = None
 
     def is_promotion_ready(self, baseline: EvaluationReport) -> bool:
         """Decide whether this version should replace *baseline*.
