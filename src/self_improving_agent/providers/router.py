@@ -21,13 +21,19 @@ replace this with a classifier trained on the interaction log.
 import logging
 import os
 import re
-from typing import ClassVar
+from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar
 
 from self_improving_agent.providers.base import (
     BaseModelProvider,
     GenerationConfig,
     ProviderResponse,
 )
+
+if TYPE_CHECKING:
+    from self_improving_agent.providers.complexity_classifier import (
+        ComplexityClassifier,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +100,7 @@ class ModelRouter:
         local: BaseModelProvider,
         remote: BaseModelProvider,
         complexity_threshold: float | None = None,
+        classifier: "ComplexityClassifier | None" = None,
     ):
         self.local = local
         self.remote = remote
@@ -103,6 +110,7 @@ class ModelRouter:
         self._remote_requests = 0
         self._fallback_count = 0
         self._total_requests = 0
+        self._classifier_used = 0
 
         # Heuristic threshold; env override for live tuning without code change
         raw_env = os.environ.get("COMPLEXITY_THRESHOLD", "").strip()
@@ -119,6 +127,11 @@ class ModelRouter:
                 self._threshold = self.DEFAULT_THRESHOLD
         else:
             self._threshold = self.DEFAULT_THRESHOLD
+
+        # Optional classifier — soft signal. If unset and a trained
+        # classifier exists at SIA_CLASSIFIER_PATH, load it lazily.
+        self._classifier = classifier
+        self._classifier_attempted_load = False
 
     @property
     def stats(self) -> dict:
@@ -192,8 +205,37 @@ class ModelRouter:
         total = length_score + marker_score + tech_score + multi_turn_score
         return min(total, 1.0)
 
+    def _ensure_classifier(self):
+        """Lazy-load a trained classifier from disk if available."""
+        if self._classifier is not None or self._classifier_attempted_load:
+            return
+        self._classifier_attempted_load = True
+        path = os.environ.get("SIA_CLASSIFIER_PATH", "models/complexity_classifier.json")
+        if Path(path).exists():
+            try:
+                from self_improving_agent.providers.complexity_classifier import (
+                    ComplexityClassifier,
+                )
+
+                self._classifier = ComplexityClassifier.load(path)
+                logger.info("Loaded complexity classifier from %s", path)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Could not load classifier at %s: %s", path, exc)
+
     def _assess_complexity(self, messages: list[dict[str, str]]) -> bool:
-        """Backward-compatible boolean wrapper around the score."""
+        """Decide whether the request should route remote.
+
+        Strategy:
+          1. If a classifier is available and confident (|p - 0.5| * 2 >= 0.4),
+             trust its prediction.
+          2. Otherwise fall back to the hand-tuned heuristic score.
+        """
+        self._ensure_classifier()
+        if self._classifier is not None:
+            p, confidence = self._classifier.predict_with_confidence(messages)
+            if confidence >= 0.4:
+                self._classifier_used += 1
+                return p >= 0.5
         return self._complexity_score(messages) >= self._threshold
 
     async def route(
