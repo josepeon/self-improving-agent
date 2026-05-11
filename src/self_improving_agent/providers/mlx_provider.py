@@ -177,6 +177,10 @@ class MLXProvider(BaseModelProvider):
             model=self._model_path,
             latency_ms=latency_ms,
             tokens_used=tokens_used,
+            metadata={
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+            },
         )
 
     async def generate_stream(
