@@ -380,3 +380,52 @@ If SIA becomes pip-installable (or a workspace dep), MAP could import
 SIA's `EvaluationHarness` directly instead of vendoring an equivalent.
 That's the original ROADMAP_V2 intent — "treat SIA as a library MAP
 depends on."
+
+---
+
+## Implementation status (updated 2026-05-11)
+
+### Shipped ✅
+
+All 15 roadmap items above are landed on `main`. Tests: 332 → 549. Pushed
+to `github.com/oh-systems/self-improving-agent`.
+
+| Item | Commit | Notes |
+|---|---|---|
+| B1 implement CLI | `fb15c77` | `sia status / evaluate / train / serve` |
+| B3 CI eval gating | `3e50b21` | unit + eval-validate + eval-remote jobs |
+| T3.1 cost tracking | `f623ce4` | thread-safe, per-(provider,model) prices |
+| T3.2 reproducibility seeds | `c37d084` | set_seed wired into training scripts |
+| T1.1 + T2.1 FastAPI server + SSE | `c35f995` | OpenAI-compat; hot-reload on registry change |
+| T1.2 Streamlit eval dashboard | `aecad93` | pass-rate over time, A-vs-B compare |
+| B2 router heuristic upgrade | `c8e12de` | 4-signal score, env-tunable threshold |
+| T1.3 multi-judge ensemble | `f8badcd` | median/mean/min over N judges in parallel |
+| T2.3 distillation pipeline | `24c2e79` | Groq → local SFT; `scripts/distill_from_groq.py` |
+| T3.4 LLM-as-judge rubric | `d71db8e` | opt-in per golden test |
+| T2.2 feedback loop | `5d54c5a` | `POST /v1/feedback`, dataset builder hook |
+| T2.4 adapter merging | `84ac9cd` | weighted-sum task arithmetic; `sia merge` |
+| T2.5 multi-base eval | `bff352c` | `sia compare-bases --spec a=mlx/... --spec b=groq/...` |
+| T3.3 scripts/_lib | `604394f` | shared argparse/env/logging/JSONL helpers |
+| T3.5 Prometheus metrics | `fcd5984` | `/metrics`; Counter/Gauge/Histogram |
+| T1.4 classifier-based router | `e28cb68` | logistic regression on hand-engineered features |
+
+Plus four post-roadmap follow-ups:
+
+- **mlx-lm 0.20+ compatibility** (`5648c9a`) — sampler API + stream_generate path + GenerationResponse shape. Verified end-to-end on v1.0-oh adapter.
+- **Python requirement relaxed** 3.12 → 3.11 (`701da82`) — unblocks downstream installs from MAP (3.11) + Twin (3.11).
+- **cost_tracker `attribute()` + `register_price()`** (`956448f`) — upstreamed from MAP. Downstream packages now extend the pricing table without touching SIA's source.
+- **MLX provider populates token metadata** (`1f3d5fe`) — `/v1/chat/completions` response usage now carries real prompt/completion counts.
+
+### Still to do 🔲
+
+#### One-time human actions
+- **Add `GROQ_API_KEY` repo secret** — Settings → Secrets and variables → Actions at https://github.com/oh-systems/self-improving-agent/settings/secrets/actions. The `eval-remote` CI job no-ops without it (logs "skipping" and exits 0). See `.github/CI_SECRETS.md`.
+- **Promote `eval-remote` from soft to hard gate** once 2-3 weeks of green runs establish a baseline. Edit `.github/workflows/ci.yml`: remove `continue-on-error: true`, add a pass-rate threshold (start at 95% since current identity eval is 100%/46).
+- **Cut a `v1.0` release tag** so downstream consumers (Twin, MAP) can pin a stable ref instead of `@main`. Trigger when SIA stabilises for a week.
+
+#### Follow-ups (already-deduped; future merges)
+- **Logging subsystem dedup** — MAP's `core/interaction_log.py` is richer than SIA's `src/self_improving_agent/logging/`. Upstreaming the MAP version (mirror of the cost_tracker move) would let Twin and MAP share one impl.
+- **First-byte latency in /v1/chat/completions** — streaming first chunk is currently the role marker (empty content). Cosmetic; client-side it's a tick of delay. Worth combining the role marker with the first content delta.
+
+#### Deferred (paid services — none required)
+- All current functionality runs on Groq free tier + local MLX. No paid integrations pending.
