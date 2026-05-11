@@ -42,6 +42,9 @@ serving = [
     "uvicorn[standard]>=0.30",
     "sse-starlette>=2.1",
 ]
+dashboard = [
+    "streamlit>=1.30",
+]
 
 [project.scripts]
 sia = "self_improving_agent.cli:main"

@@ -14,6 +14,7 @@ import logging
 import sys
 
 from self_improving_agent.commands import (
+    dashboard,
     eval_validate,
     evaluate,
     serve,
@@ -77,6 +78,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     eval_validate.add_arguments(eval_validate_p)
     eval_validate_p.set_defaults(func=eval_validate.run)
+
+    dashboard_p = subparsers.add_parser(
+        "dashboard",
+        help="Launch the Streamlit eval dashboard",
+    )
+    dashboard.add_arguments(dashboard_p)
+    dashboard_p.set_defaults(func=dashboard.run)
 
     return parser
 
