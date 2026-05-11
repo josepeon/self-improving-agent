@@ -1,6 +1,26 @@
-"""Intelligent model router — routes requests to the optimal provider."""
+"""Intelligent model router — routes requests to the optimal provider.
+
+Routing is heuristic (not a classifier). The previous version did
+``any(keyword in user_msg for keyword in COMPLEXITY_MARKERS)`` — that's
+honest if you call it a keyword list, dishonest if you call it complexity
+analysis. We now use a small score made of three signals:
+
+  1. Length: long prompts (>~200 tokens of message content) usually need
+     a more capable model.
+  2. Reasoning markers: presence of words/phrases that historically
+     correlate with hard requests ("why", "compare", "step by step",
+     "draft", "design"). Same list as before but applied with weight.
+  3. Code / technical density: presence of code fences, file paths, or
+     identifier-like tokens (snake_case, camelCase, dot-separated names).
+
+A request scores 0..1. Threshold for routing remote defaults to 0.5;
+override via constructor arg or COMPLEXITY_THRESHOLD env. T1.4 will
+replace this with a classifier trained on the interaction log.
+"""
 
 import logging
+import os
+import re
 from typing import ClassVar
 
 from self_improving_agent.providers.base import (
@@ -12,40 +32,68 @@ from self_improving_agent.providers.base import (
 logger = logging.getLogger(__name__)
 
 
+_CODE_FENCE_RE = re.compile(r"```")
+_PATH_RE = re.compile(r"\b\w+/\w+", re.UNICODE)
+_IDENT_RE = re.compile(
+    r"\b(?:[a-z]+(?:_[a-z]+)+|[a-z]+[A-Z][a-zA-Z]+|\w+\.\w+)\b"
+)
+
+
+def _word_count(text: str) -> int:
+    return len(text.split())
+
+
 class ModelRouter:
-    """Routes requests to the optimal provider based on complexity analysis.
+    """Routes requests to the optimal provider based on a heuristic score.
 
-    Routing logic (in priority order):
-    1. Explicit force_provider overrides everything.
-    2. quality_mode "fast" → local, "quality" → remote.
-    3. Complexity markers in the user message → remote.
-    4. Default: local model with automatic fallback to remote on failure.
+    Routing logic (priority):
+      1. Explicit ``force_provider`` overrides everything.
+      2. ``quality_mode`` "fast" → local, "quality" → remote.
+      3. Heuristic complexity score ≥ threshold → remote.
+      4. Default: local with automatic fallback on failure.
 
-    The router tracks performance metrics to inform future routing decisions.
+    The router tracks request counts + fallback rate so the dashboard
+    (T1.2) can show actual routing behaviour.
     """
 
-    # Keywords that suggest the request needs a more capable model
-    COMPLEXITY_MARKERS: ClassVar[list[str]] = [
-        "explain",
-        "analyze",
-        "compare",
-        "why",
-        "how does",
-        "step by step",
-        "in detail",
-        "pros and cons",
-        "write code",
-        "debug",
-        "calculate",
-        "summarize",
-        "translate",
-        "evaluate",
-    ]
+    # Reasoning-style phrases, weighted.
+    REASONING_MARKERS: ClassVar[dict[str, float]] = {
+        "why": 0.25,
+        "compare": 0.25,
+        "explain": 0.2,
+        "analyze": 0.25,
+        "step by step": 0.4,
+        "in detail": 0.3,
+        "pros and cons": 0.35,
+        "design": 0.3,
+        "draft": 0.3,
+        "summarize": 0.2,
+        "translate": 0.15,
+        "evaluate": 0.25,
+        "how does": 0.25,
+        "what's the difference": 0.25,
+        "write code": 0.3,
+        "debug": 0.3,
+        "calculate": 0.2,
+    }
+
+    # Backward-compatible alias — exposed as a flat list of marker strings.
+    # Old callers / tests can still iterate ``COMPLEXITY_MARKERS``.
+    COMPLEXITY_MARKERS: ClassVar[list[str]] = list(REASONING_MARKERS.keys())
+
+    # When the heuristic isn't sure, fall back to local. This is the safer
+    # default since local is free and fast.
+    DEFAULT_THRESHOLD: ClassVar[float] = 0.5
+
+    # Wordcount above which we start adding weight just from length alone.
+    LENGTH_FLOOR: ClassVar[int] = 60
+    LENGTH_CAP: ClassVar[int] = 300  # length contribution maxes out here
 
     def __init__(
         self,
         local: BaseModelProvider,
         remote: BaseModelProvider,
+        complexity_threshold: float | None = None,
     ):
         self.local = local
         self.remote = remote
@@ -55,6 +103,22 @@ class ModelRouter:
         self._remote_requests = 0
         self._fallback_count = 0
         self._total_requests = 0
+
+        # Heuristic threshold; env override for live tuning without code change
+        raw_env = os.environ.get("COMPLEXITY_THRESHOLD", "").strip()
+        if complexity_threshold is not None:
+            self._threshold = complexity_threshold
+        elif raw_env:
+            try:
+                self._threshold = float(raw_env)
+            except ValueError:
+                logger.warning(
+                    "COMPLEXITY_THRESHOLD=%r is not a valid float; using default %.2f",
+                    raw_env, self.DEFAULT_THRESHOLD,
+                )
+                self._threshold = self.DEFAULT_THRESHOLD
+        else:
+            self._threshold = self.DEFAULT_THRESHOLD
 
     @property
     def stats(self) -> dict:
@@ -76,20 +140,61 @@ class ModelRouter:
             ),
         }
 
-    def _assess_complexity(self, messages: list[dict[str, str]]) -> bool:
-        """Determine if the request requires the remote (more capable) model.
+    def _complexity_score(self, messages: list[dict[str, str]]) -> float:
+        """Return a 0..1 score; ≥ threshold means "send to remote."
 
-        Args:
-            messages: Chat messages in OpenAI format.
+        Signal weights:
+          - Length: gradual ramp from LENGTH_FLOOR to LENGTH_CAP words.
+          - Reasoning markers: sum of per-marker weights (capped at 0.6).
+          - Technical density: code fences (+0.3), paths (+0.1 per up to 0.2),
+            identifier-like tokens (+0.05 per up to 0.15).
+          - Multi-turn: presence of >2 messages adds +0.1 (more context to
+            keep track of).
 
-        Returns:
-            True if the request appears complex.
+        The cap of 1.0 is enforced once at the end.
         """
         if not messages:
-            return False
+            return 0.0
 
-        user_msg = messages[-1].get("content", "").lower()
-        return any(marker in user_msg for marker in self.COMPLEXITY_MARKERS)
+        user_msg = messages[-1].get("content", "")
+        lowered = user_msg.lower()
+
+        # Length signal
+        words = _word_count(user_msg)
+        if words <= self.LENGTH_FLOOR:
+            length_score = 0.0
+        elif words >= self.LENGTH_CAP:
+            length_score = 0.3
+        else:
+            length_score = 0.3 * (
+                (words - self.LENGTH_FLOOR) / (self.LENGTH_CAP - self.LENGTH_FLOOR)
+            )
+
+        # Reasoning markers
+        marker_score = 0.0
+        for marker, weight in self.REASONING_MARKERS.items():
+            if marker in lowered:
+                marker_score += weight
+        marker_score = min(marker_score, 0.6)
+
+        # Technical density
+        tech_score = 0.0
+        if _CODE_FENCE_RE.search(user_msg):
+            tech_score += 0.3
+        path_hits = len(_PATH_RE.findall(user_msg))
+        tech_score += min(path_hits * 0.1, 0.2)
+        ident_hits = len(_IDENT_RE.findall(user_msg))
+        tech_score += min(ident_hits * 0.05, 0.15)
+
+        # Multi-turn context
+        multi_turn_score = 0.1 if len(messages) > 2 else 0.0
+
+        total = length_score + marker_score + tech_score + multi_turn_score
+        return min(total, 1.0)
+
+    def _assess_complexity(self, messages: list[dict[str, str]]) -> bool:
+        """Backward-compatible boolean wrapper around the score."""
+        return self._complexity_score(messages) >= self._threshold
 
     async def route(
         self,
