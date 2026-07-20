@@ -133,8 +133,8 @@ def _build_generate_fn(target: ModelVersion | None, remote: bool):
         from self_improving_agent.providers.mlx_provider import MLXProvider
 
         provider = MLXProvider(
+            model_path=target.base_model,
             adapter_path=target.adapter_path,
-            base_model=target.base_model,
         )
 
     async def generate_fn(messages, *, temperature: float = 0.0, max_tokens: int = 256):

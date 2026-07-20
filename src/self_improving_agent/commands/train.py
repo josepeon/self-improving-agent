@@ -14,12 +14,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-from pathlib import Path
 
 from self_improving_agent.pipeline.self_improve import (
     PipelineConfig,
     SelfImprovementPipeline,
 )
+from self_improving_agent.reproducibility import set_seed
 from self_improving_agent.training.finetune import LoRAConfig
 
 logger = logging.getLogger(__name__)
@@ -95,8 +95,8 @@ def run(args: argparse.Namespace) -> int:
         from self_improving_agent.providers.mlx_provider import MLXProvider
 
         provider = MLXProvider(
+            model_path=version.base_model,
             adapter_path=version.adapter_path,
-            base_model=version.base_model,
         )
 
         async def generate_fn(
@@ -113,33 +113,40 @@ def run(args: argparse.Namespace) -> int:
     if args.dry_run:
         return _dry_run(pipeline, cfg)
 
+    set_seed(args.seed)
     print("Starting improvement cycle (this may take hours)...")
-    try:
-        result = asyncio.run(pipeline.run(seed=args.seed))
-    except TypeError:
-        # Older signature without seed kwarg
-        result = asyncio.run(pipeline.run())
+    version = asyncio.run(pipeline.run_weekly_training())
 
-    print(f"\nResult: {result}")
+    if version is None:
+        print("No training run: not enough high-quality data yet.")
+        return 0
+
+    pass_rate = (
+        f"{version.evaluation_pass_rate:.0%}"
+        if version.evaluation_pass_rate is not None
+        else "n/a"
+    )
+    print(
+        f"\nTrained {version.version} "
+        f"(status: {version.status}, pass rate: {pass_rate})"
+    )
     return 0
 
 
-def _dry_run(pipeline, cfg: PipelineConfig) -> int:
+def _dry_run(pipeline: SelfImprovementPipeline, cfg: PipelineConfig) -> int:
     """Inspect what the next cycle would do without actually training."""
-    from self_improving_agent.logging.storage import InteractionLogStore
-
-    store = InteractionLogStore(Path(cfg.log_base_path))
     try:
-        entries = list(store.iter_all())
+        stats = asyncio.run(pipeline.dataset_stats())
     except Exception as exc:
         print(f"Could not read interaction log: {exc}")
         return 1
 
-    print(f"Interaction log: {len(entries)} row(s) found")
+    print(f"Interaction log: {stats['total_interactions']} row(s) found")
+    print(f"SFT-eligible:      {stats['sft_eligible']}")
     print(f"Quality threshold: {cfg.min_quality_score}")
     print(f"Min dataset size:  {cfg.min_dataset_size}")
     print(f"Output adapter:    {cfg.finetuned_dir}/<next-version>/")
-    if len(entries) < cfg.min_dataset_size:
+    if stats["sft_eligible"] < cfg.min_dataset_size:
         print(
             "Below min_dataset_size — a real run would skip training "
             "until more data accumulates."
