@@ -333,11 +333,19 @@ class TestRouterStream:
 
         tokens = []
         async for token in router.route_stream(
-            messages=[{"role": "user", "content": "Explain how GPUs work"}],
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Explain how neural networks work step by step",
+                }
+            ],
         ):
             tokens.append(token)
 
         assert tokens == ["Sure", ", let me", " explain"]
+        # Must be a direct remote route, not a local failure + fallback.
+        assert router.stats["remote_requests"] == 1
+        assert router.stats["fallback_count"] == 0
 
     @pytest.mark.asyncio
     async def test_stream_force_remote(self, router, mock_remote):
@@ -436,6 +444,13 @@ class TestRouterStream:
 
         with pytest.raises(RuntimeError, match="Remote down"):
             async for _ in router.route_stream(
-                messages=[{"role": "user", "content": "Explain quantum physics"}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": "Explain how neural networks work step by step",
+                    }
+                ],
             ):
                 pass
+        # Confirm we actually routed remote (no fallback path involved).
+        assert router.stats["remote_requests"] == 1
