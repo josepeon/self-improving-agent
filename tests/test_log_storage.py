@@ -248,8 +248,12 @@ class TestFlushFeedback:
         await store.add_feedback(log.interaction_id, "positive")
 
         await store.flush_feedback()
+        # After a full merge nothing is pending: the file is either gone
+        # (claimed via atomic rename) or empty.
         pending = store.feedback_path / "feedback_pending.jsonl"
-        assert pending.read_text().strip() == ""
+        assert not pending.exists() or pending.read_text().strip() == ""
+        processing = store.feedback_path / "feedback_processing.jsonl"
+        assert not processing.exists()
 
     async def test_unmerged_feedback_kept(self, store: InteractionLogStore) -> None:
         # Feedback for a nonexistent interaction stays in pending

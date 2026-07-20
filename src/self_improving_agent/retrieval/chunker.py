@@ -86,6 +86,7 @@ class RecursiveChunker:
             else:
                 if current:
                     good.append(current)
+                    current = ""
                 # If single part exceeds chunk_size, recurse with finer separator
                 if len(part) > self.chunk_size and remaining_seps:
                     good.extend(self._split(part, remaining_seps))

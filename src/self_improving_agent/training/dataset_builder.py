@@ -111,12 +111,15 @@ class DatasetBuilder:
         for log in logs:
             if not log.response_text:
                 continue
-            if log.user_feedback == "positive" or (
+            # Explicit negative signals win over a high automated quality
+            # score — a user-rejected response must never land on the
+            # "chosen" side of a DPO pair.
+            if log.user_feedback == "negative" or log.failure_category:
+                negatives.append(log)
+            elif log.user_feedback == "positive" or (
                 log.quality_score is not None and log.quality_score >= min_quality_score
             ):
                 positives.append(log)
-            elif log.user_feedback == "negative" or log.failure_category:
-                negatives.append(log)
 
         # Pair by matching user_message (exact match for now)
         negative_map: dict[str, InteractionLog] = {}

@@ -168,6 +168,10 @@ class SelfImprovementPipeline:
         generate_fn = await self.model_loader(prod)
         report = await self.harness.run_all(generate_fn, prod.version)
 
+        # Load the baseline BEFORE saving today's report — otherwise the
+        # regression check would compare the report against itself.
+        baseline = self._load_latest_report(prod.version)
+
         # Persist report
         report_path = self._save_report(report, prod.version)
         prod.evaluation_report_path = str(report_path)
@@ -175,7 +179,7 @@ class SelfImprovementPipeline:
         self.registry.register(prod)
 
         # Regression check
-        self._check_regression(report, prod.version)
+        self._check_regression(report, prod.version, baseline)
 
         logger.info(
             "Daily evaluation complete: %s - %.1f%% pass rate",
@@ -215,6 +219,13 @@ class SelfImprovementPipeline:
 
         # 2. Train
         new_tag = f"v{end.strftime('%Y%m%d')}"
+        # Same-day re-runs must not clobber an existing (possibly already
+        # promoted) registry entry — suffix until the tag is free.
+        if self.registry.get(new_tag) is not None:
+            n = 2
+            while self.registry.get(f"{new_tag}.{n}") is not None:
+                n += 1
+            new_tag = f"{new_tag}.{n}"
         logger.info("Training %s with %d examples", new_tag, len(dataset))
 
         adapter_path = await self.finetuner.train(dataset, new_tag)
@@ -303,7 +314,9 @@ class SelfImprovementPipeline:
         """Persist an evaluation report to disk."""
         reports_dir = Path(self.cfg.reports_dir)
         reports_dir.mkdir(parents=True, exist_ok=True)
-        date_str = datetime.now(UTC).strftime("%Y-%m-%d")
+        # Timestamp to the second so a same-day re-run never overwrites
+        # an earlier report (lexicographic sort still equals time order).
+        date_str = datetime.now(UTC).strftime("%Y-%m-%dT%H%M%S")
         path = reports_dir / f"{version_tag}_{date_str}.json"
         payload = {
             "model_version": report.model_version,
@@ -338,9 +351,13 @@ class SelfImprovementPipeline:
             pass_rate=data.get("pass_rate", 0.0),
         )
 
-    def _check_regression(self, report: EvaluationReport, version_tag: str) -> None:
-        """Log a warning if pass rate dropped significantly."""
-        baseline = self._load_latest_report(version_tag)
+    def _check_regression(
+        self,
+        report: EvaluationReport,
+        version_tag: str,
+        baseline: EvaluationReport | None,
+    ) -> None:
+        """Log a warning if pass rate dropped significantly vs *baseline*."""
         if baseline is None:
             return
         if (

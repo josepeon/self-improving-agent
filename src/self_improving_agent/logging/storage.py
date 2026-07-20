@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,9 @@ class InteractionLogStore:
         self.interactions_path = self.base_path / "interactions"
         self.feedback_path = self.base_path / "feedback"
         self._write_lock = asyncio.Lock()
+        # Serialises whole flush_feedback() runs (kept separate from
+        # _write_lock, which individual steps acquire internally).
+        self._flush_lock = asyncio.Lock()
 
     # ── Writes ────────────────────────────────────────────────────────
 
@@ -173,50 +177,63 @@ class InteractionLogStore:
     async def flush_feedback(self) -> int:
         """Merge pending feedback into interaction log files.
 
-        Returns the number of feedback entries successfully merged.
+        The pending file is atomically renamed to a processing file
+        before merging, so feedback submitted while a flush is running
+        lands in a fresh pending file and is never lost. When several
+        pending entries target the same interaction, the last one wins.
+
+        Returns the number of interactions whose feedback was merged.
         """
         pending = self.feedback_path / "feedback_pending.jsonl"
-        if not pending.exists():
-            return 0
+        processing = self.feedback_path / "feedback_processing.jsonl"
 
-        # Read all pending entries
-        entries: list[dict[str, Any]] = []
-        async with aiofiles.open(pending) as f:
-            async for line in f:
-                stripped = line.strip()
-                if stripped:
-                    entries.append(json.loads(stripped))
+        async with self._flush_lock:
+            # Claim the pending file under the write lock so concurrent
+            # add_feedback() appends go to a fresh pending file.
+            async with self._write_lock:
+                if pending.exists():
+                    if processing.exists():
+                        # Leftover from a crashed flush — merge the two.
+                        async with (
+                            aiofiles.open(pending) as src,
+                            aiofiles.open(processing, "a") as dst,
+                        ):
+                            async for line in src:
+                                await dst.write(line)
+                        pending.unlink()
+                    else:
+                        os.replace(pending, processing)
+            if not processing.exists():
+                return 0
 
-        merged = 0
-        for entry in entries:
-            iid = entry["interaction_id"]
-            fb = entry["feedback"]
-            fb_text = entry.get("feedback_text")
+            entries: list[dict[str, Any]] = []
+            async with aiofiles.open(processing) as f:
+                async for line in f:
+                    stripped = line.strip()
+                    if stripped:
+                        entries.append(json.loads(stripped))
 
-            # Try to find and update the log in-place
-            if await self._update_interaction_feedback(iid, fb, fb_text):
-                merged += 1
-
-        # Truncate the pending file after merge
-        if merged == len(entries):
-            async with aiofiles.open(pending, "w") as f:
-                await f.write("")
-        else:
-            # Re-write only un-merged entries
-            merged_ids = set()
-            remaining: list[str] = []
+            # Last entry per interaction wins (a user can revise feedback).
+            latest: dict[str, dict[str, Any]] = {}
             for entry in entries:
-                if entry["interaction_id"] in merged_ids:
-                    continue
-                # Check if this particular entry was merged
-                log = await self.get_interaction_by_id(entry["interaction_id"])
-                if log and log.user_feedback == entry["feedback"]:
-                    merged_ids.add(entry["interaction_id"])
+                latest[entry["interaction_id"]] = entry
+
+            merged = 0
+            remaining: list[str] = []
+            for iid, entry in latest.items():
+                if await self._update_interaction_feedback(
+                    iid, entry["feedback"], entry.get("feedback_text")
+                ):
+                    merged += 1
                 else:
                     remaining.append(json.dumps(entry, separators=(",", ":")))
-            async with aiofiles.open(pending, "w") as f:
-                for line in remaining:
-                    await f.write(line + "\n")
+
+            async with self._write_lock:
+                if remaining:
+                    async with aiofiles.open(pending, "a") as f:
+                        for line in remaining:
+                            await f.write(line + "\n")
+                processing.unlink()
 
         return merged
 
@@ -313,25 +330,31 @@ class InteractionLogStore:
                     if not log_file.exists():
                         continue
 
-                    lines: list[str] = []
-                    found = False
-                    async with aiofiles.open(log_file) as f:
-                        async for line in f:
-                            stripped = line.strip()
-                            if not stripped:
-                                continue
-                            data = json.loads(stripped)
-                            if data.get("interaction_id") == interaction_id:
-                                data["user_feedback"] = feedback
-                                if feedback_text is not None:
-                                    data["user_feedback_text"] = feedback_text
-                                found = True
-                            lines.append(json.dumps(data, separators=(",", ":")))
+                    # Read + rewrite under one lock so a concurrent
+                    # log_interaction() append can't be lost, and replace
+                    # atomically so a crash can't destroy the day file.
+                    async with self._write_lock:
+                        lines: list[str] = []
+                        found = False
+                        async with aiofiles.open(log_file) as f:
+                            async for line in f:
+                                stripped = line.strip()
+                                if not stripped:
+                                    continue
+                                data = json.loads(stripped)
+                                if data.get("interaction_id") == interaction_id:
+                                    data["user_feedback"] = feedback
+                                    if feedback_text is not None:
+                                        data["user_feedback_text"] = feedback_text
+                                    found = True
+                                lines.append(json.dumps(data, separators=(",", ":")))
 
-                    if found:
-                        async with self._write_lock, aiofiles.open(log_file, "w") as f:
-                            for updated_line in lines:
-                                await f.write(updated_line + "\n")
-                        return True
+                        if found:
+                            tmp_file = log_file.with_suffix(".jsonl.tmp")
+                            async with aiofiles.open(tmp_file, "w") as f:
+                                for updated_line in lines:
+                                    await f.write(updated_line + "\n")
+                            os.replace(tmp_file, log_file)
+                            return True
 
         return False

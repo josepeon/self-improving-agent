@@ -320,10 +320,11 @@ class TestReportHelpers:
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         pipe = _make_pipeline(tmp_path)
-        # Save a good baseline
+        # Save a good baseline, then reload it the way the pipeline does
         pipe._save_report(_make_report("v1.0", pass_rate=0.95), "v1.0")
+        baseline = pipe._load_latest_report("v1.0")
         # Check with a regressed report
         regressed = _make_report("v1.0", pass_rate=0.5)
         with caplog.at_level("WARNING"):
-            pipe._check_regression(regressed, "v1.0")
+            pipe._check_regression(regressed, "v1.0", baseline)
         assert "REGRESSION" in caplog.text
