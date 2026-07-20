@@ -103,6 +103,9 @@ class FeedbackStore:
     def __init__(self, path: str | Path = "data/feedback/feedback.jsonl") -> None:
         self.path = Path(path)
         self._lock = threading.Lock()
+        # id cache so add() doesn't re-scan the whole file per call
+        # (it used to be O(file size) sync I/O inside async handlers).
+        self._known_ids: set[str] | None = None
 
     def add(self, feedback: Feedback) -> bool:
         """Append the feedback. Returns False if an entry with the same id exists.
@@ -111,13 +114,15 @@ class FeedbackStore:
         with the same triple are a no-op.
         """
         with self._lock:
-            existing_ids = self._existing_ids()
-            if feedback.id in existing_ids:
+            if self._known_ids is None:
+                self._known_ids = self._existing_ids()
+            if feedback.id in self._known_ids:
                 logger.debug("Feedback %s already recorded; skipping", feedback.id)
                 return False
             self.path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.path, "a") as f:
                 f.write(json.dumps(feedback.to_dict()) + "\n")
+            self._known_ids.add(feedback.id)
             return True
 
     def iter_all(self) -> Iterator[Feedback]:

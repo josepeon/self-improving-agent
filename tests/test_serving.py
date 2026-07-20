@@ -139,6 +139,45 @@ class TestModelsEndpoint:
 # ---------------------------------------------------------------------
 
 
+class TestModelResolution:
+    def test_unknown_model_404(self, app_with_fake_provider):
+        app, _ = app_with_fake_provider
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "no-such-version",
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
+            )
+        assert response.status_code == 404
+
+    def test_canary_404_when_none_registered(self, app_with_fake_provider):
+        app, _ = app_with_fake_provider
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "sia-canary",
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
+            )
+        assert response.status_code == 404
+
+    def test_pinned_version_resolves(self, app_with_fake_provider):
+        app, _ = app_with_fake_provider
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "v1.0-test",
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
+            )
+        assert response.status_code == 200
+        assert response.json()["sia"]["served_version"] == "v1.0-test"
+
+
 class TestChatCompletions:
     def test_503_when_no_production_model(self, empty_app):
         with TestClient(empty_app) as client:

@@ -217,9 +217,11 @@ class MLXProvider(BaseModelProvider):
                     stream_generate,
                 )
 
-            # stream_generate is a synchronous generator — wrap it
-            loop = asyncio.get_event_loop()
-            queue: asyncio.Queue[str | None] = asyncio.Queue()
+            # stream_generate is a synchronous generator — wrap it.
+            # The queue carries tokens, a terminating exception, or the
+            # None sentinel for clean completion.
+            loop = asyncio.get_running_loop()
+            queue: asyncio.Queue[str | BaseException | None] = asyncio.Queue()
 
             sampler = _make_sampler(config.temperature, config.top_p)
             stream_kwargs: dict = {
@@ -246,19 +248,22 @@ class MLXProvider(BaseModelProvider):
                         else:
                             token = str(response)
                         asyncio.run_coroutine_threadsafe(queue.put(token), loop)
-                finally:
-                    asyncio.run_coroutine_threadsafe(
-                        queue.put(None),
-                        loop,  # Sentinel
-                    )
+                except BaseException as exc:  # propagate to the async side
+                    asyncio.run_coroutine_threadsafe(queue.put(exc), loop)
+                else:
+                    asyncio.run_coroutine_threadsafe(queue.put(None), loop)
 
             loop.run_in_executor(None, _stream_worker)
 
             while True:
-                token = await queue.get()
-                if token is None:
+                item = await queue.get()
+                if item is None:
                     break
-                yield token
+                if isinstance(item, BaseException):
+                    # Mid-stream failure must surface to the caller, not
+                    # end the stream as if it completed normally.
+                    raise item
+                yield item
 
         except Exception as e:
             logger.error("MLX streaming failed: %s", e)

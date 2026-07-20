@@ -86,15 +86,46 @@ class ServerState:
     def loaded_version(self) -> str | None:
         return self._loaded_version
 
-    async def ensure_loaded(self) -> Any:
-        """Ensure the current production provider is loaded; reload if changed."""
-        async with self._reload_lock:
+    def _resolve_target(self, model_id: str | None) -> ModelVersion:
+        """Map an API model id to a registry version.
+
+        ``None``/``""``/``"sia-production"`` → current production;
+        ``"sia-canary"`` → current canary; anything else is looked up
+        as a version tag.
+        """
+        if model_id is None or model_id in ("", "sia-production"):
             target = self.registry.get_production()
             if target is None:
                 raise HTTPException(
                     status_code=503,
                     detail="No production model registered.",
                 )
+            return target
+        if model_id == "sia-canary":
+            canary = self.registry.get_canary()
+            if canary is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="No canary model registered.",
+                )
+            return canary
+        version = self.registry.get(model_id)
+        if version is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown model {model_id!r}.",
+            )
+        return version
+
+    async def ensure_loaded(self, model_id: str | None = None) -> Any:
+        """Ensure the provider for *model_id* is loaded; reload if changed.
+
+        Defaults to the current production model. The server keeps one
+        model resident at a time; requesting a different version swaps
+        the loaded provider.
+        """
+        async with self._reload_lock:
+            target = self._resolve_target(model_id)
 
             if self._provider is not None and self._loaded_version == target.version:
                 return self._provider
@@ -113,9 +144,11 @@ class ServerState:
                 if self.registry_path.exists():
                     mtime = self.registry_path.stat().st_mtime
                     if mtime != self._mtime:
-                        self._mtime = mtime
-                        # Re-read; ensure_loaded() will swap if version changed
+                        # Re-read BEFORE recording the mtime — if parsing
+                        # fails the change is retried on the next tick
+                        # instead of being missed forever.
                         self.registry = ModelRegistry(self.registry_path)
+                        self._mtime = mtime
                         prod = self.registry.get_production()
                         if prod and prod.version != self._loaded_version:
                             logger.info(
@@ -188,9 +221,10 @@ def _make_app() -> FastAPI:
     async def metrics_endpoint() -> Response:
         """Prometheus-format metrics. Standard scrape endpoint."""
         state: ServerState = app.state.sia
-        # Refresh the version gauge to reflect the currently-loaded model
+        # Refresh the version gauge to reflect the currently-loaded model.
+        # Exclusive set: a hot-reloaded predecessor must not linger at 1.
         if state.loaded_version:
-            state.metrics["version_info"].set(
+            state.metrics["version_info"].set_exclusive(
                 1, version=state.loaded_version, status="loaded"
             )
         return Response(
@@ -243,21 +277,26 @@ def _make_app() -> FastAPI:
             model_version=request.model_version,
             metadata=request.metadata or {},
         )
-        accepted = state.feedback.add(feedback)
+        # Blocking file I/O — keep it off the event loop.
+        loop = asyncio.get_running_loop()
+        accepted = await loop.run_in_executor(None, state.feedback.add, feedback)
         return FeedbackResponse(id=feedback.id, accepted=accepted)
 
     @app.get("/v1/feedback/stats")
     async def feedback_stats() -> dict:
         state: ServerState = app.state.sia
-        return {
-            "totals": state.feedback.counts_by_rating(),
-            "by_version": state.feedback.counts_by_version(),
-        }
+        # Full-file scans — run in a worker thread, not on the event loop.
+        loop = asyncio.get_running_loop()
+        totals, by_version = await asyncio.gather(
+            loop.run_in_executor(None, state.feedback.counts_by_rating),
+            loop.run_in_executor(None, state.feedback.counts_by_version),
+        )
+        return {"totals": totals, "by_version": by_version}
 
     @app.post("/v1/chat/completions")
     async def chat_completions(request: ChatCompletionRequest) -> Any:
         state: ServerState = app.state.sia
-        provider = await state.ensure_loaded()
+        provider = await state.ensure_loaded(request.model)
 
         if request.stream:
             return StreamingResponse(

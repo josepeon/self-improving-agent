@@ -183,16 +183,23 @@ class DistillationRunner:
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         semaphore = asyncio.Semaphore(self.max_concurrent)
 
+        async def _bounded(question: str) -> DistilledPair | None:
+            async with semaphore:
+                return await self._distill_one(question, report)
+
+        questions = list(pool)
+        report.questions_seen = len(questions)
+
+        # Up to max_concurrent teacher+judge chains in flight at once;
+        # results are written in input order once all complete.
+        pairs = await asyncio.gather(*(_bounded(q) for q in questions))
+
         with open(self.output_path, "w") as out:
-            for question in pool:
-                report.questions_seen += 1
-                async with semaphore:
-                    pair = await self._distill_one(question, report)
+            for pair in pairs:
                 if pair is None:
                     report.pairs_dropped += 1
                     continue
                 out.write(json.dumps(pair.to_sft_row()) + "\n")
-                out.flush()
                 report.pairs_kept += 1
 
         report.judge_calibration = self.judge.calibration()

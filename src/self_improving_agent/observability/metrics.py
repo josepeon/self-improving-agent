@@ -114,6 +114,17 @@ class Gauge:
         with self._lock:
             self._values[key] = value
 
+    def set_exclusive(self, value: float, **labels: str) -> None:
+        """Set this label set and drop every other one.
+
+        For single-holder gauges (e.g. "currently loaded version") where
+        stale label sets from previous holders must not linger.
+        """
+        key = tuple(sorted(labels.items()))
+        with self._lock:
+            self._values.clear()
+            self._values[key] = value
+
     def render(self) -> str:
         lines = [
             f"# HELP {self.name} {self.help_text}",
