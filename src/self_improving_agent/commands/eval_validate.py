@@ -84,7 +84,7 @@ def run(args: argparse.Namespace) -> int:
             registry = ModelRegistry(registry_path)
             # Touch every entry to force any deserialization errors
             _ = list(registry.versions.values())
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             errors.append(f"Registry at {registry_path} failed to load: {exc}")
 
     # 3) Existing reports have the right shape

@@ -5,6 +5,7 @@ Default model: Llama 3.1 8B Instruct 4-bit (~4.5GB, ~6GB RAM).
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 import time
@@ -154,15 +155,13 @@ class MLXProvider(BaseModelProvider):
 
         # Cost is $0 for local MLX but the call still counts towards token
         # totals — useful for budget-vs-latency analysis.
-        try:
+        with contextlib.suppress(Exception):
             record_usage(
                 provider="mlx",
                 model=self._model_path,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
             )
-        except Exception:  # noqa: BLE001
-            pass
 
         logger.debug(
             "MLX response: model=%s tokens=%d latency=%.1fms",

@@ -17,8 +17,9 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Iterable, Iterator, TypeVar
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +108,9 @@ def ensure_dir(path: str | Path) -> Path:
 # ---------------------------------------------------------------------
 
 
-def make_progress(iterable: Iterable[T], total: int | None = None, label: str = "") -> Iterator[T]:
+def make_progress(
+    iterable: Iterable[T], total: int | None = None, label: str = ""
+) -> Iterator[T]:
     """Wrap ``iterable`` with tqdm if available, else yield unchanged.
 
     The scripts don't all want the same progress library installed — this
@@ -154,7 +157,9 @@ def read_jsonl(path: str | Path) -> Iterator[dict[str, Any]]:
             try:
                 yield json.loads(line)
             except json.JSONDecodeError as exc:
-                logger.warning("Skipping malformed line %d in %s: %s", idx, resolved, exc)
+                logger.warning(
+                    "Skipping malformed line %d in %s: %s", idx, resolved, exc
+                )
 
 
 def write_jsonl(path: str | Path, rows: Iterable[dict[str, Any]]) -> int:

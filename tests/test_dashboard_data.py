@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 
 import pytest
 
 from self_improving_agent.dashboard.data import (
-    DashboardState,
     diff_versions,
     load_dashboard_state,
 )
@@ -19,51 +17,63 @@ from self_improving_agent.dashboard.data import (
 def populated(tmp_path):
     """Returns paths to a registry + reports dir with realistic content."""
     registry = tmp_path / "registry.json"
-    registry.write_text(json.dumps({
-        "updated_at": "2026-02-27T19:20:01+00:00",
-        "versions": [
+    registry.write_text(
+        json.dumps(
             {
-                "version": "v1.0",
-                "base_model": "test-base",
-                "adapter_path": "models/finetuned/v1.0",
-                "created_at": "2026-02-25T15:07:07+00:00",
-                "training_dataset_size": 2496,
-                "status": "deprecated",
-            },
-            {
-                "version": "v1.1",
-                "base_model": "test-base",
-                "adapter_path": "models/finetuned/v1.1",
-                "created_at": "2026-02-26T11:27:52+00:00",
-                "training_dataset_size": 2696,
-                "status": "production",
-            },
-        ],
-    }))
+                "updated_at": "2026-02-27T19:20:01+00:00",
+                "versions": [
+                    {
+                        "version": "v1.0",
+                        "base_model": "test-base",
+                        "adapter_path": "models/finetuned/v1.0",
+                        "created_at": "2026-02-25T15:07:07+00:00",
+                        "training_dataset_size": 2496,
+                        "status": "deprecated",
+                    },
+                    {
+                        "version": "v1.1",
+                        "base_model": "test-base",
+                        "adapter_path": "models/finetuned/v1.1",
+                        "created_at": "2026-02-26T11:27:52+00:00",
+                        "training_dataset_size": 2696,
+                        "status": "production",
+                    },
+                ],
+            }
+        )
+    )
 
     reports = tmp_path / "reports"
     reports.mkdir()
 
     # Stagger mtimes so order is deterministic
-    (reports / "v1.0_eval.json").write_text(json.dumps({
-        "model_version": "v1.0",
-        "timestamp": "2026-02-25T16:00:00+00:00",
-        "pass_rate": 0.72,
-        "passed_tests": 72,
-        "total_tests": 100,
-        "avg_latency_ms": 240.0,
-        "category_scores": {"factual": 0.80, "tone": 0.65},
-    }))
+    (reports / "v1.0_eval.json").write_text(
+        json.dumps(
+            {
+                "model_version": "v1.0",
+                "timestamp": "2026-02-25T16:00:00+00:00",
+                "pass_rate": 0.72,
+                "passed_tests": 72,
+                "total_tests": 100,
+                "avg_latency_ms": 240.0,
+                "category_scores": {"factual": 0.80, "tone": 0.65},
+            }
+        )
+    )
     time.sleep(0.01)
-    (reports / "v1.1_eval.json").write_text(json.dumps({
-        "model_version": "v1.1",
-        "timestamp": "2026-02-26T12:00:00+00:00",
-        "pass_rate": 0.85,
-        "passed_tests": 85,
-        "total_tests": 100,
-        "avg_latency_ms": 220.0,
-        "category_scores": {"factual": 0.88, "tone": 0.83, "safety": 0.91},
-    }))
+    (reports / "v1.1_eval.json").write_text(
+        json.dumps(
+            {
+                "model_version": "v1.1",
+                "timestamp": "2026-02-26T12:00:00+00:00",
+                "pass_rate": 0.85,
+                "passed_tests": 85,
+                "total_tests": 100,
+                "avg_latency_ms": 220.0,
+                "category_scores": {"factual": 0.88, "tone": 0.83, "safety": 0.91},
+            }
+        )
+    )
     return registry, reports
 
 

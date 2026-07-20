@@ -55,8 +55,14 @@ def run(args: argparse.Namespace) -> int:
     env["SIA_REPORTS_DIR"] = args.reports_dir
 
     cmd = [
-        sys.executable, "-m", "streamlit", "run",
-        str(app_path), "--server.port", str(args.port),
-        "--server.headless", "true",
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(app_path),
+        "--server.port",
+        str(args.port),
+        "--server.headless",
+        "true",
     ]
     return subprocess.call(cmd, env=env)

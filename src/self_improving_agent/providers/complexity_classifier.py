@@ -32,36 +32,53 @@ logger = logging.getLogger(__name__)
 
 # Feature names — order matters; the weights vector is parallel to this list.
 FEATURES = (
-    "len_words",       # 0..1: words/200, capped
-    "marker_strong",   # 0..1: has step-by-step/design/pros-and-cons
-    "marker_medium",   # 0..1: has explain/analyze/why/compare
-    "marker_weak",     # 0..1: has summarize/translate
-    "code_fence",      # 0/1
-    "has_paths",       # 0/1
-    "has_idents",      # 0/1
-    "multi_turn",      # 0/1: >2 messages
-    "has_question",    # 0/1: contains a question mark
-    "bias",            # always 1 (intercept term)
+    "len_words",  # 0..1: words/200, capped
+    "marker_strong",  # 0..1: has step-by-step/design/pros-and-cons
+    "marker_medium",  # 0..1: has explain/analyze/why/compare
+    "marker_weak",  # 0..1: has summarize/translate
+    "code_fence",  # 0/1
+    "has_paths",  # 0/1
+    "has_idents",  # 0/1
+    "multi_turn",  # 0/1: >2 messages
+    "has_question",  # 0/1: contains a question mark
+    "bias",  # always 1 (intercept term)
 )
 
 
 # Marker tier sets — only the words; the heuristic owns the weights.
-_STRONG_MARKERS = frozenset({
-    "step by step", "in detail", "pros and cons", "draft", "design",
-})
-_MEDIUM_MARKERS = frozenset({
-    "explain", "analyze", "compare", "why", "how does",
-    "debug", "evaluate", "write code", "what's the difference",
-})
-_WEAK_MARKERS = frozenset({
-    "summarize", "translate", "calculate",
-})
+_STRONG_MARKERS = frozenset(
+    {
+        "step by step",
+        "in detail",
+        "pros and cons",
+        "draft",
+        "design",
+    }
+)
+_MEDIUM_MARKERS = frozenset(
+    {
+        "explain",
+        "analyze",
+        "compare",
+        "why",
+        "how does",
+        "debug",
+        "evaluate",
+        "write code",
+        "what's the difference",
+    }
+)
+_WEAK_MARKERS = frozenset(
+    {
+        "summarize",
+        "translate",
+        "calculate",
+    }
+)
 
 _CODE_FENCE_RE = re.compile(r"```")
 _PATH_RE = re.compile(r"\b\w+/\w+")
-_IDENT_RE = re.compile(
-    r"\b(?:[a-z]+(?:_[a-z]+)+|[a-z]+[A-Z][a-zA-Z]+|\w+\.\w+)\b"
-)
+_IDENT_RE = re.compile(r"\b(?:[a-z]+(?:_[a-z]+)+|[a-z]+[A-Z][a-zA-Z]+|\w+\.\w+)\b")
 
 
 # Hand-tuned default weights that roughly reproduce the B2 heuristic in
@@ -135,9 +152,7 @@ class ComplexityClassifier:
     weights from {features, label} examples.
     """
 
-    weights: dict[str, float] = field(
-        default_factory=lambda: dict(DEFAULT_WEIGHTS)
-    )
+    weights: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_WEIGHTS))
     trained: bool = False
     samples_seen: int = 0
 
@@ -199,8 +214,12 @@ class ComplexityClassifier:
 
         # Quick accuracy on the training set as a sanity check
         correct = sum(
-            1 for features, label in examples
-            if (_sigmoid(sum(weights.get(k, 0.0) * v for k, v in features.items())) >= 0.5)
+            1
+            for features, label in examples
+            if (
+                _sigmoid(sum(weights.get(k, 0.0) * v for k, v in features.items()))
+                >= 0.5
+            )
             == bool(label)
         )
         return {

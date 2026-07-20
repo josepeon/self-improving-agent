@@ -26,7 +26,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -154,9 +154,7 @@ class DistillationReport:
                 mean = stats.get("mean")
                 count = stats.get("count")
                 mean_str = f"{mean:.2f}" if mean is not None else "—"
-                lines.append(
-                    f"    {name:<24} mean={mean_str}  count={count}"
-                )
+                lines.append(f"    {name:<24} mean={mean_str}  count={count}")
         return "\n".join(lines)
 
 
@@ -210,18 +208,19 @@ class DistillationRunner:
 
         try:
             response = await self.teacher.generate(messages, self.teacher_config)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Teacher call failed for %r: %s", question[:60], exc)
             report.teacher_errors += 1
             return None
 
         # 2) Judge filters
-        conversation = messages + [
-            {"role": "assistant", "content": response.text}
+        conversation = [
+            *messages,
+            {"role": "assistant", "content": response.text},
         ]
         try:
             verdict = await self.judge.score(conversation)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Judge ensemble failed for %r: %s", question[:60], exc)
             report.judge_errors += 1
             return None

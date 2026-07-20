@@ -36,10 +36,11 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ class FeedbackStore:
                     continue
                 try:
                     yield Feedback.from_dict(data)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     logger.warning("Skipping invalid feedback row: %s", exc)
                     continue
 
@@ -198,7 +199,5 @@ def bad_interaction_ids(store: FeedbackStore) -> set[str]:
     correction (if any) re-enters via ``feedback_to_sft_pair`` above.
     """
     return {
-        fb.interaction_id
-        for fb in store.iter_all()
-        if fb.rating == FeedbackRating.BAD
+        fb.interaction_id for fb in store.iter_all() if fb.rating == FeedbackRating.BAD
     }

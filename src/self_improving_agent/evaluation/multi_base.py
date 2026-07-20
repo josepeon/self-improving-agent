@@ -74,14 +74,16 @@ class MultiBaseReport:
         """Side-by-side rows suitable for a dashboard or console table."""
         rows = []
         for label, report in self.reports.items():
-            rows.append({
-                "label": label,
-                "base_model": report.base_model,
-                "pass_rate": report.pass_rate,
-                "passed": report.passed_tests,
-                "total": report.total_tests,
-                "avg_latency_ms": report.avg_latency_ms,
-            })
+            rows.append(
+                {
+                    "label": label,
+                    "base_model": report.base_model,
+                    "pass_rate": report.pass_rate,
+                    "passed": report.passed_tests,
+                    "total": report.total_tests,
+                    "avg_latency_ms": report.avg_latency_ms,
+                }
+            )
         return rows
 
     def category_table(self) -> dict[str, dict[str, float]]:
@@ -142,7 +144,7 @@ async def evaluate_bases(
         async def generate_fn(message, history=None, _provider=provider):
             cfg = GenerationConfig(temperature=0.0, max_tokens=256)
             history = history or []
-            messages = list(history) + [{"role": "user", "content": message}]
+            messages = [*history, {"role": "user", "content": message}]
             r = await _provider.generate(messages, cfg)
             return r.text
 
@@ -154,7 +156,9 @@ async def evaluate_bases(
         report.reports[spec.label] = result
         logger.info(
             "%s: %d/%d (%.0f%%)",
-            spec.label, result.passed_tests, result.total_tests,
+            spec.label,
+            result.passed_tests,
+            result.total_tests,
             result.pass_rate * 100,
         )
 

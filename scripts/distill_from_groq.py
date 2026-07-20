@@ -24,20 +24,20 @@ from pathlib import Path
 # Project root on path so 'from self_improving_agent...' works when invoked directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from self_improving_agent.observability.cost_tracker import (  # noqa: E402
+from self_improving_agent.observability.cost_tracker import (
     begin_run,
     render_summary,
 )
-from self_improving_agent.providers.groq_provider import GroqProvider  # noqa: E402
-from self_improving_agent.reproducibility import (  # noqa: E402
+from self_improving_agent.providers.groq_provider import GroqProvider
+from self_improving_agent.reproducibility import (
     get_seed_from_env,
     set_seed,
 )
-from self_improving_agent.training.distillation import (  # noqa: E402
+from self_improving_agent.training.distillation import (
     JsonlQuestionPool,
     run_distillation,
 )
-from self_improving_agent.training.judges import ProviderJudge  # noqa: E402
+from self_improving_agent.training.judges import ProviderJudge
 
 
 def parse_args() -> argparse.Namespace:
@@ -77,9 +77,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Random seed (default: $SIA_SEED or 42).",
     )
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Debug logging."
-    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging.")
     return parser.parse_args()
 
 

@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
 from self_improving_agent.providers.base import ProviderResponse
 from self_improving_agent.training.distillation import (
-    DistilledPair,
     DistillationRunner,
+    DistilledPair,
     JsonlQuestionPool,
     ListQuestionPool,
     run_distillation,
 )
 from self_improving_agent.training.judges import EnsembleJudge, ProviderJudge
-
 
 # ---------------------------------------------------------------------
 # Fakes
@@ -66,10 +64,14 @@ class TestQuestionPools:
     def test_jsonl_pool(self, tmp_path):
         path = tmp_path / "q.jsonl"
         path.write_text(
-            json.dumps({"prompt": "what is X?"}) + "\n"
-            + json.dumps({"question": "explain Y"}) + "\n"
-            + json.dumps({"user": "tell me Z"}) + "\n"
-            + json.dumps({"unrelated": "no good field"}) + "\n"
+            json.dumps({"prompt": "what is X?"})
+            + "\n"
+            + json.dumps({"question": "explain Y"})
+            + "\n"
+            + json.dumps({"user": "tell me Z"})
+            + "\n"
+            + json.dumps({"unrelated": "no good field"})
+            + "\n"
         )
         pool = JsonlQuestionPool(path)
         assert list(pool) == ["what is X?", "explain Y", "tell me Z"]
@@ -77,9 +79,11 @@ class TestQuestionPools:
     def test_jsonl_pool_skips_corrupt_lines(self, tmp_path):
         path = tmp_path / "q.jsonl"
         path.write_text(
-            json.dumps({"prompt": "good"}) + "\n"
+            json.dumps({"prompt": "good"})
+            + "\n"
             + "this is not json\n"
-            + json.dumps({"prompt": "also good"}) + "\n"
+            + json.dumps({"prompt": "also good"})
+            + "\n"
         )
         assert list(JsonlQuestionPool(path)) == ["good", "also good"]
 
@@ -151,7 +155,8 @@ class TestDistillationRunner:
     async def test_teacher_error_counted(self, tmp_path):
         teacher = FailingProvider()
         judge = EnsembleJudge(
-            judges=[ProviderJudge(FakeProvider(text="9"))], threshold=7.0,
+            judges=[ProviderJudge(FakeProvider(text="9"))],
+            threshold=7.0,
         )
         runner = DistillationRunner(
             teacher=teacher, judge=judge, output_path=tmp_path / "out.jsonl"
@@ -189,7 +194,8 @@ class TestDistillationRunner:
 
         teacher = CapturingProvider(text="x")
         judge = EnsembleJudge(
-            judges=[ProviderJudge(FakeProvider(text="9"))], threshold=7.0,
+            judges=[ProviderJudge(FakeProvider(text="9"))],
+            threshold=7.0,
         )
         runner = DistillationRunner(
             teacher=teacher,
@@ -207,7 +213,8 @@ class TestDistillationRunner:
         runner = DistillationRunner(
             teacher=FakeProvider(text="x"),
             judge=EnsembleJudge(
-                judges=[ProviderJudge(FakeProvider(text="9"))], threshold=7.0,
+                judges=[ProviderJudge(FakeProvider(text="9"))],
+                threshold=7.0,
             ),
             output_path=tmp_path / "out.jsonl",
         )

@@ -40,9 +40,7 @@ logger = logging.getLogger(__name__)
 
 _CODE_FENCE_RE = re.compile(r"```")
 _PATH_RE = re.compile(r"\b\w+/\w+", re.UNICODE)
-_IDENT_RE = re.compile(
-    r"\b(?:[a-z]+(?:_[a-z]+)+|[a-z]+[A-Z][a-zA-Z]+|\w+\.\w+)\b"
-)
+_IDENT_RE = re.compile(r"\b(?:[a-z]+(?:_[a-z]+)+|[a-z]+[A-Z][a-zA-Z]+|\w+\.\w+)\b")
 
 
 def _word_count(text: str) -> int:
@@ -122,7 +120,8 @@ class ModelRouter:
             except ValueError:
                 logger.warning(
                     "COMPLEXITY_THRESHOLD=%r is not a valid float; using default %.2f",
-                    raw_env, self.DEFAULT_THRESHOLD,
+                    raw_env,
+                    self.DEFAULT_THRESHOLD,
                 )
                 self._threshold = self.DEFAULT_THRESHOLD
         else:
@@ -210,7 +209,9 @@ class ModelRouter:
         if self._classifier is not None or self._classifier_attempted_load:
             return
         self._classifier_attempted_load = True
-        path = os.environ.get("SIA_CLASSIFIER_PATH", "models/complexity_classifier.json")
+        path = os.environ.get(
+            "SIA_CLASSIFIER_PATH", "models/complexity_classifier.json"
+        )
         if Path(path).exists():
             try:
                 from self_improving_agent.providers.complexity_classifier import (
@@ -219,7 +220,7 @@ class ModelRouter:
 
                 self._classifier = ComplexityClassifier.load(path)
                 logger.info("Loaded complexity classifier from %s", path)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("Could not load classifier at %s: %s", path, exc)
 
     def _assess_complexity(self, messages: list[dict[str, str]]) -> bool:

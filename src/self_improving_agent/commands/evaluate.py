@@ -149,8 +149,7 @@ def _render_report(report, elapsed_s: float) -> str:
     lines = [
         f"Pass rate: {report.pass_rate:.0%}  "
         f"({report.passed_tests}/{report.total_tests})",
-        f"Mean latency: {report.avg_latency_ms:.0f}ms  "
-        f"Wall time: {elapsed_s:.1f}s",
+        f"Mean latency: {report.avg_latency_ms:.0f}ms  Wall time: {elapsed_s:.1f}s",
     ]
     if report.category_scores:
         lines.append("By category:")

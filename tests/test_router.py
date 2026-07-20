@@ -202,14 +202,16 @@ class TestRouterStats:
         await router.route(messages=[{"role": "user", "content": "Hi"}])
         # Complex request → remote (need enough signal to clear threshold)
         await router.route(
-            messages=[{
-                "role": "user",
-                "content": (
-                    "Explain step by step in detail how to compare and "
-                    "evaluate the pros and cons of microservice vs monolith "
-                    "architectures, including code organisation tradeoffs."
-                ),
-            }]
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "Explain step by step in detail how to compare and "
+                        "evaluate the pros and cons of microservice vs monolith "
+                        "architectures, including code organisation tradeoffs."
+                    ),
+                }
+            ]
         )
 
         stats = router.stats
@@ -294,12 +296,12 @@ class TestRouterComplexityAssessment:
         from self_improving_agent.providers.router import ModelRouter
 
         r = ModelRouter(mock_local, mock_remote)
-        assert r._assess_complexity(
-            [{"role": "user", "content": "Hello"}]
-        ) is False  # Score of 0 is still < 0.01
-        assert r._assess_complexity(
-            [{"role": "user", "content": "Explain X"}]
-        ) is True  # Score of 0.2 > 0.01
+        assert (
+            r._assess_complexity([{"role": "user", "content": "Hello"}]) is False
+        )  # Score of 0 is still < 0.01
+        assert (
+            r._assess_complexity([{"role": "user", "content": "Explain X"}]) is True
+        )  # Score of 0.2 > 0.01
 
 
 class TestRouterStream:

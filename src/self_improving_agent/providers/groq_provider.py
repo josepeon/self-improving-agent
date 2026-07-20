@@ -1,5 +1,6 @@
 """Groq API provider — wraps Groq SDK for remote Llama 3.3 70B inference."""
 
+import contextlib
 import logging
 import os
 import time
@@ -111,15 +112,13 @@ class GroqProvider(BaseModelProvider):
         # that scoped their call get correct role attribution; the rest land
         # in "unknown".
         if response.usage is not None:
-            try:
+            with contextlib.suppress(Exception):
                 record_usage(
                     provider="groq",
                     model=self._model,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                 )
-            except Exception:  # noqa: BLE001 — cost tracking must never break inference
-                pass
 
         logger.debug(
             "Groq response: model=%s tokens=%d latency=%.1fms",

@@ -62,7 +62,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--regression-threshold",
         type=float,
         default=0.95,
-        help="New version must score at least N× the production pass rate.",
+        help="New version must score at least N times the production pass rate.",
     )
     parser.add_argument(
         "--seed",
@@ -99,7 +99,9 @@ def run(args: argparse.Namespace) -> int:
             base_model=version.base_model,
         )
 
-        async def generate_fn(messages, *, temperature: float = 0.0, max_tokens: int = 256):
+        async def generate_fn(
+            messages, *, temperature: float = 0.0, max_tokens: int = 256
+        ):
             cfg = GenerationConfig(temperature=temperature, max_tokens=max_tokens)
             r = await provider.generate(messages, cfg)
             return r.text

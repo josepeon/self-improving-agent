@@ -21,6 +21,7 @@ when ``models/registry.json`` changes on disk. Polling cadence: 30s.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import time
@@ -94,14 +95,12 @@ class ServerState:
                     detail="No production model registered.",
                 )
 
-            if (
-                self._provider is not None
-                and self._loaded_version == target.version
-            ):
+            if self._provider is not None and self._loaded_version == target.version:
                 return self._provider
 
-            logger.info("Loading model %s (adapter=%s)",
-                        target.version, target.adapter_path)
+            logger.info(
+                "Loading model %s (adapter=%s)", target.version, target.adapter_path
+            )
             self._provider = _build_provider(target)
             self._loaded_version = target.version
             return self._provider
@@ -120,11 +119,12 @@ class ServerState:
                         if prod and prod.version != self._loaded_version:
                             logger.info(
                                 "Registry changed: hot-reloading %s -> %s",
-                                self._loaded_version, prod.version,
+                                self._loaded_version,
+                                prod.version,
                             )
                             self._provider = None
                             self._loaded_version = None
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("Registry watch error: %s", exc)
             await asyncio.sleep(REGISTRY_POLL_SECONDS)
 
@@ -166,10 +166,8 @@ async def _lifespan(app: FastAPI):
         yield
     finally:
         watch_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await watch_task
-        except asyncio.CancelledError:
-            pass
 
 
 def _make_app() -> FastAPI:
@@ -307,9 +305,11 @@ async def _complete_chat(
         ],
         usage=CompletionUsage(
             prompt_tokens=response.metadata.get("prompt_tokens", 0)
-            if response.metadata else 0,
+            if response.metadata
+            else 0,
             completion_tokens=response.metadata.get("completion_tokens", 0)
-            if response.metadata else 0,
+            if response.metadata
+            else 0,
             total_tokens=response.tokens_used,
         ),
         sia={
@@ -364,7 +364,7 @@ async def _stream_chat(
                 ],
             )
             yield f"data: {chunk.model_dump_json()}\n\n"
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         error_payload = {"error": {"message": str(exc), "type": type(exc).__name__}}
         yield f"data: {json.dumps(error_payload)}\n\n"
 

@@ -140,15 +140,17 @@ class TestAttribution:
     def test_explicit_agent_role_kwarg_wins(self):
         with attribute("planner"):
             rec = record_usage(
-                "groq", "llama-3.3-70b-versatile", 10, 5,
+                "groq",
+                "llama-3.3-70b-versatile",
+                10,
+                5,
                 agent_role="explicit-override",
             )
         assert rec.agent_role == "explicit-override"
 
     def test_nested_attribute_innermost_wins(self):
-        with attribute("outer"):
-            with attribute("inner"):
-                rec = record_usage("groq", "llama-3.3-70b-versatile", 10, 5)
+        with attribute("outer"), attribute("inner"):
+            rec = record_usage("groq", "llama-3.3-70b-versatile", 10, 5)
         assert rec.agent_role == "inner"
 
     def test_context_resets_after_exit(self):

@@ -11,11 +11,9 @@ What this suite covers without MLX:
 
 from __future__ import annotations
 
-import asyncio
 import json
 
 import pytest
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from self_improving_agent.providers.base import ProviderResponse
@@ -26,7 +24,6 @@ from self_improving_agent.training.registry import (
     ModelStatus,
     ModelVersion,
 )
-
 
 # ---------------------------------------------------------------------
 # Test-side fakes
@@ -219,7 +216,7 @@ class TestStreamingCompletions:
 
         # OpenAI-compatible: every frame starts with `data: `
         frames = [
-            line[len("data: "):]
+            line[len("data: ") :]
             for line in body.split("\n\n")
             if line.startswith("data: ")
         ]
@@ -246,7 +243,7 @@ class TestStreamingCompletions:
                 },
             )
         frames = [
-            json.loads(line[len("data: "):])
+            json.loads(line[len("data: ") :])
             for line in response.text.split("\n\n")
             if line.startswith("data: ") and not line.endswith("[DONE]")
         ]
@@ -265,7 +262,9 @@ class TestSchemas:
     def test_request_normalises_stop(self):
         # Just validates the pydantic schema accepts both shapes
         req1 = ChatCompletionRequest(
-            model="x", messages=[{"role": "user", "content": "hi"}], stop="STOP",
+            model="x",
+            messages=[{"role": "user", "content": "hi"}],
+            stop="STOP",
         )
         req2 = ChatCompletionRequest(
             model="x",

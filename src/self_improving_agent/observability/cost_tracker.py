@@ -30,10 +30,9 @@ from __future__ import annotations
 
 import contextvars
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator
-
 
 # ===========================================
 # Pricing
@@ -319,9 +318,7 @@ def render_summary(tracker: CostTracker | None = None) -> str:
     if len(by_model) > 1:
         lines.append("  by model:")
         for key, t in sorted(by_model.items(), key=lambda kv: -kv[1].cost_usd):
-            lines.append(
-                f"    {key:<40} {t.calls:>3} call(s)  ${t.cost_usd:.4f}"
-            )
+            lines.append(f"    {key:<40} {t.calls:>3} call(s)  ${t.cost_usd:.4f}")
 
     if totals.unpriced_calls:
         lines.append(

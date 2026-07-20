@@ -30,14 +30,22 @@ from __future__ import annotations
 import math
 import threading
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
-
 
 # Histogram buckets: 50ms..30s, geometric ratio. Tuned for LLM inference
 # where p50 is typically 200-800ms and p99 can stretch to ~10s.
 DEFAULT_BUCKETS = (
-    0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0,
+    0.05,
+    0.1,
+    0.2,
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    20.0,
+    30.0,
 )
 
 
@@ -45,8 +53,7 @@ def _format_labels(labels: dict[str, str]) -> str:
     if not labels:
         return ""
     items = ",".join(
-        f'{k}="{_escape_value(str(v))}"'
-        for k, v in sorted(labels.items())
+        f'{k}="{_escape_value(str(v))}"' for k, v in sorted(labels.items())
     )
     return "{" + items + "}"
 
@@ -253,7 +260,13 @@ def make_sia_registry() -> tuple[MetricRegistry, dict]:
         "Loaded model version (value=1 indicates currently loaded).",
     )
 
-    for m in (requests_total, request_duration, fallbacks_total, tokens_total, version_info):
+    for m in (
+        requests_total,
+        request_duration,
+        fallbacks_total,
+        tokens_total,
+        version_info,
+    ):
         registry.register(m)
 
     return registry, {

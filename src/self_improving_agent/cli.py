@@ -64,9 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_arguments(evaluate_p)
     evaluate_p.set_defaults(func=evaluate.run)
 
-    train_p = subparsers.add_parser(
-        "train", help="Run the self-improvement cycle"
-    )
+    train_p = subparsers.add_parser("train", help="Run the self-improvement cycle")
     train.add_arguments(train_p)
     train_p.set_defaults(func=train.run)
 

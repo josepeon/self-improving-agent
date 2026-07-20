@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
-import pytest
-
 from self_improving_agent.providers.complexity_classifier import (
     DEFAULT_WEIGHTS,
     FEATURES,
@@ -13,7 +9,6 @@ from self_improving_agent.providers.complexity_classifier import (
     extract_features,
     feedback_to_training_example,
 )
-
 
 # ---------------------------------------------------------------------
 # Feature extraction
@@ -52,21 +47,25 @@ class TestFeatureExtraction:
         assert features["marker_strong"] == 0.0
 
     def test_code_density(self):
-        features = extract_features([
-            {
-                "role": "user",
-                "content": "```python\nfrom auth.handler import x\n```",
-            }
-        ])
+        features = extract_features(
+            [
+                {
+                    "role": "user",
+                    "content": "```python\nfrom auth.handler import x\n```",
+                }
+            ]
+        )
         assert features["code_fence"] == 1.0
         assert features["has_idents"] == 1.0  # auth.handler matches
 
     def test_multi_turn(self):
-        features = extract_features([
-            {"role": "user", "content": "a"},
-            {"role": "assistant", "content": "b"},
-            {"role": "user", "content": "c"},
-        ])
+        features = extract_features(
+            [
+                {"role": "user", "content": "a"},
+                {"role": "assistant", "content": "b"},
+                {"role": "user", "content": "c"},
+            ]
+        )
         assert features["multi_turn"] == 1.0
 
     def test_has_question(self):
@@ -92,14 +91,18 @@ class TestUntrainedClassifier:
 
     def test_complex_prompt_high_probability(self):
         clf = ComplexityClassifier()
-        p = clf.predict([{
-            "role": "user",
-            "content": (
-                "Step by step, explain the design tradeoffs of microservices "
-                "vs monoliths in detail, including pros and cons of each "
-                "approach, with code examples."
-            ),
-        }])
+        p = clf.predict(
+            [
+                {
+                    "role": "user",
+                    "content": (
+                        "Step by step, explain the design tradeoffs of microservices "
+                        "vs monoliths in detail, including pros and cons of each "
+                        "approach, with code examples."
+                    ),
+                }
+            ]
+        )
         # Strong-marker-rich prompt should push well above 0.5
         assert p >= 0.6
 
@@ -135,7 +138,8 @@ class TestTraining:
         for _ in range(20):
             f_complex, label_c = feedback_to_training_example(
                 "Step by step, explain the design tradeoffs of X vs Y in detail "
-                "with pros and cons", "bad",
+                "with pros and cons",
+                "bad",
             )
             examples.append((f_complex, label_c))
             f_simple, label_s = feedback_to_training_example("Hi", "good")
@@ -156,18 +160,25 @@ class TestTraining:
         clf = ComplexityClassifier()
         examples = []
         for _ in range(10):
-            examples.append(feedback_to_training_example(
-                "Step by step, explain X in detail", "bad",
-            ))
+            examples.append(
+                feedback_to_training_example(
+                    "Step by step, explain X in detail",
+                    "bad",
+                )
+            )
             examples.append(feedback_to_training_example("Hi", "good"))
         clf.train(examples, epochs=400)
 
         # Untrained probabilities should now be sharper at the extremes
         simple = clf.predict([{"role": "user", "content": "Hi there"}])
-        complex_ = clf.predict([{
-            "role": "user",
-            "content": "Step by step, explain in detail",
-        }])
+        complex_ = clf.predict(
+            [
+                {
+                    "role": "user",
+                    "content": "Step by step, explain in detail",
+                }
+            ]
+        )
         assert simple < 0.4
         assert complex_ > 0.6
 
@@ -240,7 +251,9 @@ class TestRouterIntegration:
         # With confident remote classifier, even a trivial prompt routes remote
         assert router._assess_complexity([{"role": "user", "content": "Hi"}]) is True
 
-    def test_router_falls_back_to_heuristic_when_no_classifier(self, tmp_path, monkeypatch):
+    def test_router_falls_back_to_heuristic_when_no_classifier(
+        self, tmp_path, monkeypatch
+    ):
         from unittest.mock import MagicMock
 
         from self_improving_agent.providers.router import ModelRouter

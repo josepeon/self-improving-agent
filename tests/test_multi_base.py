@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
 from self_improving_agent.cli import main
@@ -77,9 +74,7 @@ class TestParseSpec:
         assert spec.adapter_path is None
 
     def test_spec_with_adapter(self):
-        spec = _parse_spec(
-            "v1.2=mlx/base/llama+adapter=models/finetuned/v1.2/adapters"
-        )
+        spec = _parse_spec("v1.2=mlx/base/llama+adapter=models/finetuned/v1.2/adapters")
         assert spec.adapter_path == "models/finetuned/v1.2/adapters"
         assert spec.model_path == "base/llama"
 
@@ -207,9 +202,13 @@ class TestEvaluateBases:
 
 class TestCompareCommand:
     def test_invalid_spec_returns_2(self, tmp_path):
-        result = main([
-            "compare-bases",
-            "--spec", "totally-invalid-spec",
-            "--test-suite", str(tmp_path),
-        ])
+        result = main(
+            [
+                "compare-bases",
+                "--spec",
+                "totally-invalid-spec",
+                "--test-suite",
+                str(tmp_path),
+            ]
+        )
         assert result == 2

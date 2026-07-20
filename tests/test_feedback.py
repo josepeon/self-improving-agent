@@ -22,7 +22,6 @@ from self_improving_agent.training.registry import (
     ModelVersion,
 )
 
-
 # ---------------------------------------------------------------------
 # Fakes (shared with test_serving.py shape)
 # ---------------------------------------------------------------------
@@ -33,8 +32,11 @@ class FakeProvider:
 
     async def generate(self, messages, config):
         return ProviderResponse(
-            text="ok", provider="fake", model="m",
-            latency_ms=0.0, tokens_used=1,
+            text="ok",
+            provider="fake",
+            model="m",
+            latency_ms=0.0,
+            tokens_used=1,
         )
 
     async def generate_stream(self, *_a, **_kw):  # pragma: no cover
@@ -50,11 +52,13 @@ def server_app(tmp_path, monkeypatch):
     """Server with FakeProvider and a populated registry."""
     registry_path = tmp_path / "registry.json"
     registry = ModelRegistry(registry_path)
-    registry.register(ModelVersion(
-        version="v1.0-test",
-        base_model="b",
-        status=ModelStatus.PRODUCTION,
-    ))
+    registry.register(
+        ModelVersion(
+            version="v1.0-test",
+            base_model="b",
+            status=ModelStatus.PRODUCTION,
+        )
+    )
     monkeypatch.setattr(server_module, "_build_provider", lambda v: FakeProvider())
     monkeypatch.setenv("SIA_REGISTRY_PATH", str(registry_path))
     monkeypatch.setenv("SIA_FEEDBACK_PATH", str(tmp_path / "feedback.jsonl"))
@@ -142,12 +146,15 @@ class TestFeedbackStore:
         path = tmp_path / "fb.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            json.dumps({
-                "interaction_id": "i1",
-                "rating": "good",
-                "user_message": "u",
-                "original_response": "r",
-            }) + "\n"
+            json.dumps(
+                {
+                    "interaction_id": "i1",
+                    "rating": "good",
+                    "user_message": "u",
+                    "original_response": "r",
+                }
+            )
+            + "\n"
             + "not json at all\n"
         )
         store = FeedbackStore(path)
@@ -157,35 +164,54 @@ class TestFeedbackStore:
     def test_counts_by_rating(self, tmp_path):
         store = FeedbackStore(tmp_path / "fb.jsonl")
         for i in range(3):
-            store.add(Feedback(
-                interaction_id=f"i{i}",
-                rating=FeedbackRating.GOOD,
+            store.add(
+                Feedback(
+                    interaction_id=f"i{i}",
+                    rating=FeedbackRating.GOOD,
+                    user_message="u",
+                    original_response="r",
+                )
+            )
+        store.add(
+            Feedback(
+                interaction_id="bad1",
+                rating=FeedbackRating.BAD,
                 user_message="u",
                 original_response="r",
-            ))
-        store.add(Feedback(
-            interaction_id="bad1",
-            rating=FeedbackRating.BAD,
-            user_message="u",
-            original_response="r",
-        ))
+            )
+        )
         counts = store.counts_by_rating()
         assert counts == {"good": 3, "bad": 1}
 
     def test_counts_by_version(self, tmp_path):
         store = FeedbackStore(tmp_path / "fb.jsonl")
-        store.add(Feedback(
-            interaction_id="a", rating=FeedbackRating.GOOD,
-            user_message="u", original_response="r", model_version="v1.0",
-        ))
-        store.add(Feedback(
-            interaction_id="b", rating=FeedbackRating.BAD,
-            user_message="u", original_response="r", model_version="v1.0",
-        ))
-        store.add(Feedback(
-            interaction_id="c", rating=FeedbackRating.GOOD,
-            user_message="u", original_response="r", model_version="v1.1",
-        ))
+        store.add(
+            Feedback(
+                interaction_id="a",
+                rating=FeedbackRating.GOOD,
+                user_message="u",
+                original_response="r",
+                model_version="v1.0",
+            )
+        )
+        store.add(
+            Feedback(
+                interaction_id="b",
+                rating=FeedbackRating.BAD,
+                user_message="u",
+                original_response="r",
+                model_version="v1.0",
+            )
+        )
+        store.add(
+            Feedback(
+                interaction_id="c",
+                rating=FeedbackRating.GOOD,
+                user_message="u",
+                original_response="r",
+                model_version="v1.1",
+            )
+        )
         by_version = store.counts_by_version()
         assert by_version["v1.0"] == {"good": 1, "bad": 1}
         assert by_version["v1.1"] == {"good": 1, "bad": 0}
@@ -233,14 +259,22 @@ class TestDatasetBuilderIntegration:
 
     def test_bad_interaction_ids(self, tmp_path):
         store = FeedbackStore(tmp_path / "fb.jsonl")
-        store.add(Feedback(
-            interaction_id="bad1", rating=FeedbackRating.BAD,
-            user_message="u", original_response="r",
-        ))
-        store.add(Feedback(
-            interaction_id="good1", rating=FeedbackRating.GOOD,
-            user_message="u", original_response="r",
-        ))
+        store.add(
+            Feedback(
+                interaction_id="bad1",
+                rating=FeedbackRating.BAD,
+                user_message="u",
+                original_response="r",
+            )
+        )
+        store.add(
+            Feedback(
+                interaction_id="good1",
+                rating=FeedbackRating.GOOD,
+                user_message="u",
+                original_response="r",
+            )
+        )
         ids = bad_interaction_ids(store)
         assert ids == {"bad1"}
 

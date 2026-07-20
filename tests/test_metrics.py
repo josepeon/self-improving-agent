@@ -22,7 +22,6 @@ from self_improving_agent.training.registry import (
     ModelVersion,
 )
 
-
 # ---------------------------------------------------------------------
 # Counter
 # ---------------------------------------------------------------------
@@ -143,8 +142,11 @@ class TestRegistry:
     def test_sia_factory_returns_expected_handles(self):
         registry, handles = make_sia_registry()
         for key in (
-            "requests_total", "request_duration",
-            "fallbacks_total", "tokens_total", "version_info",
+            "requests_total",
+            "request_duration",
+            "fallbacks_total",
+            "tokens_total",
+            "version_info",
         ):
             assert key in handles
         # Initial render is well-formed even with no data
@@ -166,8 +168,11 @@ def server_app(tmp_path, monkeypatch):
 
         async def generate(self, messages, config):
             return ProviderResponse(
-                text="ok", provider="fake", model="m",
-                latency_ms=0.0, tokens_used=1,
+                text="ok",
+                provider="fake",
+                model="m",
+                latency_ms=0.0,
+                tokens_used=1,
             )
 
         async def generate_stream(self, *_a, **_kw):  # pragma: no cover
@@ -179,9 +184,13 @@ def server_app(tmp_path, monkeypatch):
 
     registry_path = tmp_path / "registry.json"
     registry = ModelRegistry(registry_path)
-    registry.register(ModelVersion(
-        version="v1.0-test", base_model="b", status=ModelStatus.PRODUCTION,
-    ))
+    registry.register(
+        ModelVersion(
+            version="v1.0-test",
+            base_model="b",
+            status=ModelStatus.PRODUCTION,
+        )
+    )
     monkeypatch.setattr(server_module, "_build_provider", lambda v: FakeProvider())
     monkeypatch.setenv("SIA_REGISTRY_PATH", str(registry_path))
     monkeypatch.setenv("SIA_FEEDBACK_PATH", str(tmp_path / "feedback.jsonl"))

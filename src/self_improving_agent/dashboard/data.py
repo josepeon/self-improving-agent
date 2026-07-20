@@ -71,9 +71,7 @@ def load_dashboard_state(
     for r in reports:
         by_version.setdefault(r.model_version, []).append(r)
     for v in versions:
-        v.reports = sorted(
-            by_version.get(v.version, []), key=lambda r: r.mtime
-        )
+        v.reports = sorted(by_version.get(v.version, []), key=lambda r: r.mtime)
 
     return DashboardState(versions=versions, reports=reports)
 
@@ -89,14 +87,16 @@ def _load_versions(registry_path: Path) -> list[VersionSummary]:
 
     versions: list[VersionSummary] = []
     for entry in data.get("versions", []):
-        versions.append(VersionSummary(
-            version=entry.get("version", "<unknown>"),
-            status=entry.get("status", "unknown"),
-            base_model=entry.get("base_model", ""),
-            adapter_path=entry.get("adapter_path"),
-            created_at=entry.get("created_at"),
-            training_dataset_size=int(entry.get("training_dataset_size", 0)),
-        ))
+        versions.append(
+            VersionSummary(
+                version=entry.get("version", "<unknown>"),
+                status=entry.get("status", "unknown"),
+                base_model=entry.get("base_model", ""),
+                adapter_path=entry.get("adapter_path"),
+                created_at=entry.get("created_at"),
+                training_dataset_size=int(entry.get("training_dataset_size", 0)),
+            )
+        )
     return versions
 
 
@@ -110,24 +110,25 @@ def _load_reports(reports_dir: Path) -> list[ReportSummary]:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError):
             continue
-        summaries.append(ReportSummary(
-            file=str(path),
-            model_version=data.get("model_version", "<unknown>"),
-            timestamp=data.get("timestamp"),
-            pass_rate=data.get("pass_rate"),
-            passed_tests=int(data.get("passed_tests", 0)),
-            total_tests=int(data.get("total_tests", 0)),
-            avg_latency_ms=data.get("avg_latency_ms"),
-            category_scores=data.get("category_scores", {}),
-            mtime=path.stat().st_mtime,
-        ))
+        summaries.append(
+            ReportSummary(
+                file=str(path),
+                model_version=data.get("model_version", "<unknown>"),
+                timestamp=data.get("timestamp"),
+                pass_rate=data.get("pass_rate"),
+                passed_tests=int(data.get("passed_tests", 0)),
+                total_tests=int(data.get("total_tests", 0)),
+                avg_latency_ms=data.get("avg_latency_ms"),
+                category_scores=data.get("category_scores", {}),
+                mtime=path.stat().st_mtime,
+            )
+        )
     return summaries
 
 
-def diff_versions(
-    state: DashboardState, version_a: str, version_b: str
-) -> dict:
+def diff_versions(state: DashboardState, version_a: str, version_b: str) -> dict:
     """Compare two versions' latest reports — used by the "compare A vs B" view."""
+
     def _by_name(name: str) -> VersionSummary | None:
         return next((v for v in state.versions if v.version == name), None)
 
@@ -146,7 +147,8 @@ def diff_versions(
         "pass_rate_b": b_latest.pass_rate if b_latest else None,
         "pass_rate_delta": (
             (b_latest.pass_rate - a_latest.pass_rate)
-            if a_latest and b_latest
+            if a_latest
+            and b_latest
             and a_latest.pass_rate is not None
             and b_latest.pass_rate is not None
             else None
@@ -155,9 +157,7 @@ def diff_versions(
     }
 
 
-def _category_diff(
-    a: ReportSummary | None, b: ReportSummary | None
-) -> dict[str, dict]:
+def _category_diff(a: ReportSummary | None, b: ReportSummary | None) -> dict[str, dict]:
     if not a or not b:
         return {}
     out: dict[str, dict] = {}
@@ -168,6 +168,8 @@ def _category_diff(
         out[cat] = {
             "a": a_score,
             "b": b_score,
-            "delta": (b_score - a_score) if a_score is not None and b_score is not None else None,
+            "delta": (b_score - a_score)
+            if a_score is not None and b_score is not None
+            else None,
         }
     return out

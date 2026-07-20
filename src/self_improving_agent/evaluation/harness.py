@@ -101,9 +101,7 @@ class EvaluationHarness:
         failures.extend(_check_must_not_contain(response_text, expected))
         failures.extend(_check_latency(latency_ms, expected))
         failures.extend(_check_max_length(response_text, expected))
-        failures.extend(
-            await _check_judge(user_message, response_text, expected)
-        )
+        failures.extend(await _check_judge(user_message, response_text, expected))
 
         total_checks = _count_checks(expected)
         passed_checks = total_checks - len(failures)
@@ -298,7 +296,7 @@ async def _check_judge(
 
     try:
         provider = _get_judge_provider(provider_name, model)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return [f"Could not build judge provider: {exc}"]
 
     from self_improving_agent.providers.base import GenerationConfig
@@ -318,7 +316,7 @@ async def _check_judge(
             ],
             GenerationConfig(temperature=0.2, max_tokens=32),
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Judge provider failed: %s", exc)
         return [f"Judge unavailable: {type(exc).__name__}"]
 

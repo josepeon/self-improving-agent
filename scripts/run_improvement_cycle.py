@@ -200,7 +200,9 @@ async def step_generate_self_play(
         if prod and prod.get("adapter_path"):
             adapter_path = Path(prod["adapter_path"])
         else:
-            adapter_path = PROJECT_ROOT / "models" / "finetuned" / "v1.2-oh" / "adapters"
+            adapter_path = (
+                PROJECT_ROOT / "models" / "finetuned" / "v1.2-oh" / "adapters"
+            )
 
     output_path = TRAINING_DIR / "oh_conversations_latest.jsonl"
     count = await gen_run(
@@ -391,7 +393,9 @@ def step_register(
         status = ModelStatus.FAILED
     else:
         status = ModelStatus.PRODUCTION
-        logger.info("  Evaluation passed (%.0f%%) — promoting to PRODUCTION", pass_rate * 100)
+        logger.info(
+            "  Evaluation passed (%.0f%%) — promoting to PRODUCTION", pass_rate * 100
+        )
 
     # Save eval results
     eval_path = Path(adapter_path).parent / "eval_results.json"
@@ -445,7 +449,10 @@ async def run_cycle(
     logger.info("  Training version:   %s", version)
     logger.info("  Sync since:         %s", since)
     logger.info("  Score real data:    %s", score_real)
-    logger.info("  Self-play rounds:   %s", self_play_rounds if not skip_self_play else "skipped")
+    logger.info(
+        "  Self-play rounds:   %s",
+        self_play_rounds if not skip_self_play else "skipped",
+    )
     logger.info("")
 
     # Step 1: Sync

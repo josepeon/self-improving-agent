@@ -15,7 +15,6 @@ from self_improving_agent.training.judges import (
     _parse_score,
 )
 
-
 # ---------------------------------------------------------------------
 # Stubs
 # ---------------------------------------------------------------------
@@ -208,7 +207,7 @@ class TestEnsembleJudge:
     @pytest.mark.asyncio
     async def test_judges_run_in_parallel(self):
         # All judges take ~50ms; ensemble should finish in roughly that,
-        # not N × 50ms.
+        # not N x 50ms.
         class SlowProvider(FakeProvider):
             async def generate(self, messages, config):
                 await asyncio.sleep(0.05)
@@ -216,8 +215,7 @@ class TestEnsembleJudge:
 
         ensemble = EnsembleJudge(
             judges=[
-                ProviderJudge(SlowProvider(text="8"), name=f"j{i}")
-                for i in range(4)
+                ProviderJudge(SlowProvider(text="8"), name=f"j{i}") for i in range(4)
             ],
             max_parallel=4,
         )

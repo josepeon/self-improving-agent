@@ -74,10 +74,8 @@ def run(args: argparse.Namespace) -> int:
         sources.append(MergeSource(path=path, weight=weight))
 
     try:
-        result = merge_adapters(
-            sources, args.output, normalize_weights=args.normalize
-        )
-    except Exception as exc:  # noqa: BLE001
+        result = merge_adapters(sources, args.output, normalize_weights=args.normalize)
+    except Exception as exc:
         print(f"Merge failed: {exc}")
         return 1
 

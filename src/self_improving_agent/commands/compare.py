@@ -108,9 +108,7 @@ def _render_table(report) -> str:
     if not rows:
         return "No results."
     width = max(len(r["label"]) for r in rows)
-    lines = [
-        f"{'label':<{width}}  pass  passed/total  avg_latency_ms"
-    ]
+    lines = [f"{'label':<{width}}  pass  passed/total  avg_latency_ms"]
     for r in sorted(rows, key=lambda x: -x["pass_rate"]):
         lines.append(
             f"{r['label']:<{width}}  "

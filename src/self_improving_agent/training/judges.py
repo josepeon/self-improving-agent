@@ -28,7 +28,7 @@ import logging
 import re
 import statistics
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol
 
 from self_improving_agent.providers.base import (
@@ -111,8 +111,7 @@ _DEFAULT_SYSTEM = (
 
 def _format_conversation(conversation: list[dict[str, str]]) -> str:
     return "\n".join(
-        f"{m.get('role', 'user').upper()}: {m.get('content', '')}"
-        for m in conversation
+        f"{m.get('role', 'user').upper()}: {m.get('content', '')}" for m in conversation
     )
 
 
@@ -154,7 +153,7 @@ class ProviderJudge:
                 ],
                 config,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("%s judge failed: %s", self.name, exc)
             return JudgeVerdict(
                 judge=self.name,
@@ -262,9 +261,7 @@ class EnsembleJudge:
     def aggregator(self) -> Aggregator:
         return AGGREGATORS[self.aggregation]
 
-    async def score(
-        self, conversation: list[dict[str, str]]
-    ) -> EnsembleVerdict:
+    async def score(self, conversation: list[dict[str, str]]) -> EnsembleVerdict:
         """Ask every judge in parallel; aggregate; return."""
         semaphore = asyncio.Semaphore(self.max_parallel)
 

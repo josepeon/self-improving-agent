@@ -40,10 +40,10 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     # Lazy import keeps `sia --help` cheap and `sia status` independent.
-    from self_improving_agent.serving import server  # noqa: F401
-
     # Pass registry path via env so the server module is import-clean.
     import os
+
+    from self_improving_agent.serving import server  # noqa: F401
 
     os.environ.setdefault("SIA_REGISTRY_PATH", args.registry)
 

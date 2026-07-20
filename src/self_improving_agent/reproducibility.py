@@ -91,7 +91,7 @@ def set_seed(seed: int = DEFAULT_SEED) -> SeedReport:
         report.mlx = True
     except ImportError:
         pass
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # MLX exists but seeding failed somehow — log, don't crash.
         logger.warning("mlx.random.seed failed: %s", exc)
 

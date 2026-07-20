@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -124,7 +123,7 @@ def merge_adapters(
 
     # Load every adapter
     loaded: list[tuple[MergeSource, float, dict[str, Any]]] = []
-    for source, weight in zip(sources, weights):
+    for source, weight in zip(sources, weights, strict=True):
         adapter_file = source.path / ADAPTER_FILENAME
         if not adapter_file.exists():
             raise FileNotFoundError(f"No {ADAPTER_FILENAME} in {source.path}")
@@ -143,9 +142,7 @@ def merge_adapters(
     keys_per_count: dict[str, int] = {}
     for key in all_keys:
         contributors = [
-            (weight, tensors[key])
-            for _, weight, tensors in loaded
-            if key in tensors
+            (weight, tensors[key]) for _, weight, tensors in loaded if key in tensors
         ]
         keys_per_count[key] = len(contributors)
         if len(contributors) == 1:
@@ -165,7 +162,7 @@ def merge_adapters(
     config = _read_first_config(sources[0].path)
     config["merged_from"] = [
         {"path": str(s.path), "weight": w}
-        for s, w in zip(sources, weights)
+        for s, w in zip(sources, weights, strict=True)
     ]
     config["merge_method"] = "weighted_sum"
     with open(output_dir / ADAPTER_CONFIG_FILENAME, "w") as f:
@@ -175,7 +172,7 @@ def merge_adapters(
         output_path=output_dir,
         sources=[
             MergeSource(path=s.path, weight=w)
-            for s, w in zip(sources, weights)
+            for s, w in zip(sources, weights, strict=True)
         ],
         keys_merged=len(merged),
         keys_only_in_one=only_in_one,

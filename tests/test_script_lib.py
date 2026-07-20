@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from _lib import (  # noqa: E402
+from _lib import (
     ensure_dir,
     init_logging,
     load_env_or_die,
@@ -114,9 +114,11 @@ class TestJsonlIO:
     def test_read_skips_malformed(self, tmp_path, caplog):
         path = tmp_path / "mixed.jsonl"
         path.write_text(
-            json.dumps({"good": 1}) + "\n"
+            json.dumps({"good": 1})
+            + "\n"
             + "not json\n"
-            + json.dumps({"good": 2}) + "\n"
+            + json.dumps({"good": 2})
+            + "\n"
         )
         with caplog.at_level(logging.WARNING):
             rows = list(read_jsonl(path))
@@ -131,10 +133,7 @@ class TestJsonlIO:
 
     def test_read_blank_lines_skipped(self, tmp_path):
         path = tmp_path / "blanks.jsonl"
-        path.write_text(
-            json.dumps({"a": 1}) + "\n\n\n"
-            + json.dumps({"a": 2}) + "\n"
-        )
+        path.write_text(json.dumps({"a": 1}) + "\n\n\n" + json.dumps({"a": 2}) + "\n")
         assert list(read_jsonl(path)) == [{"a": 1}, {"a": 2}]
 
     def test_read_nonexistent_raises(self, tmp_path):

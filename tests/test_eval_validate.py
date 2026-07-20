@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from self_improving_agent.cli import main
 
 
@@ -27,24 +25,34 @@ class TestEvalValidate:
                 "        content: hi\n"
             ),
         )
-        result = main([
-            "eval-validate",
-            "--test-suite", str(suite),
-            "--registry", str(tmp_path / "registry.json"),
-            "--reports-dir", str(tmp_path / "reports"),
-        ])
+        result = main(
+            [
+                "eval-validate",
+                "--test-suite",
+                str(suite),
+                "--registry",
+                str(tmp_path / "registry.json"),
+                "--reports-dir",
+                str(tmp_path / "reports"),
+            ]
+        )
         out = capsys.readouterr().out
         assert result == 0
         assert "OK" in out
         assert "1 golden test" in out
 
     def test_fails_when_no_tests(self, tmp_path, capsys):
-        result = main([
-            "eval-validate",
-            "--test-suite", str(tmp_path / "empty"),
-            "--registry", str(tmp_path / "registry.json"),
-            "--reports-dir", str(tmp_path / "reports"),
-        ])
+        result = main(
+            [
+                "eval-validate",
+                "--test-suite",
+                str(tmp_path / "empty"),
+                "--registry",
+                str(tmp_path / "registry.json"),
+                "--reports-dir",
+                str(tmp_path / "reports"),
+            ]
+        )
         out = capsys.readouterr().out
         assert result == 1
         assert "Only 0 golden test" in out
@@ -54,16 +62,20 @@ class TestEvalValidate:
         _write_yaml(
             suite / "broken.yaml",
             (
-                "tests:\n"
-                "  - id: bad\n"  # missing 'messages'
+                "tests:\n  - id: bad\n"  # missing 'messages'
             ),
         )
-        result = main([
-            "eval-validate",
-            "--test-suite", str(suite),
-            "--registry", str(tmp_path / "registry.json"),
-            "--reports-dir", str(tmp_path / "reports"),
-        ])
+        result = main(
+            [
+                "eval-validate",
+                "--test-suite",
+                str(suite),
+                "--registry",
+                str(tmp_path / "registry.json"),
+                "--reports-dir",
+                str(tmp_path / "reports"),
+            ]
+        )
         out = capsys.readouterr().out
         assert result == 1
         assert "missing keys" in out or "empty messages" in out
@@ -84,12 +96,17 @@ class TestEvalValidate:
         reports.mkdir()
         (reports / "garbage.json").write_text("not json at all")
 
-        result = main([
-            "eval-validate",
-            "--test-suite", str(suite),
-            "--registry", str(tmp_path / "registry.json"),
-            "--reports-dir", str(reports),
-        ])
+        result = main(
+            [
+                "eval-validate",
+                "--test-suite",
+                str(suite),
+                "--registry",
+                str(tmp_path / "registry.json"),
+                "--reports-dir",
+                str(reports),
+            ]
+        )
         out = capsys.readouterr().out
         assert result == 1
         assert "not valid JSON" in out
@@ -110,12 +127,17 @@ class TestEvalValidate:
         reports.mkdir()
         (reports / "partial.json").write_text(json.dumps({"model_version": "v1"}))
 
-        result = main([
-            "eval-validate",
-            "--test-suite", str(suite),
-            "--registry", str(tmp_path / "registry.json"),
-            "--reports-dir", str(reports),
-        ])
+        result = main(
+            [
+                "eval-validate",
+                "--test-suite",
+                str(suite),
+                "--registry",
+                str(tmp_path / "registry.json"),
+                "--reports-dir",
+                str(reports),
+            ]
+        )
         out = capsys.readouterr().out
         assert result == 1
         assert "missing required keys" in out
@@ -133,13 +155,19 @@ class TestEvalValidate:
             ),
         )
         # Only one test; require at least 5
-        result = main([
-            "eval-validate",
-            "--test-suite", str(suite),
-            "--registry", str(tmp_path / "registry.json"),
-            "--reports-dir", str(tmp_path / "reports"),
-            "--min-tests", "5",
-        ])
+        result = main(
+            [
+                "eval-validate",
+                "--test-suite",
+                str(suite),
+                "--registry",
+                str(tmp_path / "registry.json"),
+                "--reports-dir",
+                str(tmp_path / "reports"),
+                "--min-tests",
+                "5",
+            ]
+        )
         out = capsys.readouterr().out
         assert result == 1
         assert "minimum is 5" in out

@@ -35,12 +35,8 @@ def main() -> None:
         layout="wide",
     )
 
-    registry_path = os.environ.get(
-        "SIA_REGISTRY_PATH", "models/registry.json"
-    )
-    reports_dir = os.environ.get(
-        "SIA_REPORTS_DIR", "evaluation/reports"
-    )
+    registry_path = os.environ.get("SIA_REGISTRY_PATH", "models/registry.json")
+    reports_dir = os.environ.get("SIA_REPORTS_DIR", "evaluation/reports")
 
     state = load_dashboard_state(registry_path, reports_dir)
 
@@ -86,9 +82,7 @@ def _render_overview(state: DashboardState) -> None:
             "Base model": v.base_model,
             "Dataset size": v.training_dataset_size,
             "Latest pass rate": (
-                f"{v.latest_pass_rate:.0%}"
-                if v.latest_pass_rate is not None
-                else "—"
+                f"{v.latest_pass_rate:.0%}" if v.latest_pass_rate is not None else "—"
             ),
             "Created": (v.created_at or "")[:10],
         }
@@ -100,19 +94,23 @@ def _render_overview(state: DashboardState) -> None:
 def _render_pass_rate_over_time(state: DashboardState) -> None:
     st.subheader("Pass rate over time")
     if not state.reports:
-        st.caption("No reports yet. Run `sia evaluate --remote` or evaluate a "
-                   "registered version to populate evaluation/reports/.")
+        st.caption(
+            "No reports yet. Run `sia evaluate --remote` or evaluate a "
+            "registered version to populate evaluation/reports/."
+        )
         return
 
     chart_data = []
     for r in state.reports:
         if r.pass_rate is None:
             continue
-        chart_data.append({
-            "timestamp": r.timestamp or "",
-            "model": r.model_version,
-            "pass_rate": r.pass_rate,
-        })
+        chart_data.append(
+            {
+                "timestamp": r.timestamp or "",
+                "model": r.model_version,
+                "pass_rate": r.pass_rate,
+            }
+        )
 
     if not chart_data:
         st.caption("Reports exist but none have a pass rate.")
@@ -136,15 +134,19 @@ def _render_category_heatmap(state: DashboardState) -> None:
             continue
         latest = v.reports[-1]
         for cat, score in latest.category_scores.items():
-            rows.append({
-                "version": v.version,
-                "category": cat,
-                "score": score,
-            })
+            rows.append(
+                {
+                    "version": v.version,
+                    "category": cat,
+                    "score": score,
+                }
+            )
 
     if not rows:
-        st.caption("No category scores yet — these populate once "
-                   "evaluation reports contain a category_scores field.")
+        st.caption(
+            "No category scores yet — these populate once "
+            "evaluation reports contain a category_scores field."
+        )
         return
 
     st.dataframe(rows, use_container_width=True, hide_index=True)
@@ -161,9 +163,7 @@ def _render_compare_view(state: DashboardState) -> None:
     with col_a:
         version_a = st.selectbox("Version A", names, index=0)
     with col_b:
-        version_b = st.selectbox(
-            "Version B", names, index=min(1, len(names) - 1)
-        )
+        version_b = st.selectbox("Version B", names, index=min(1, len(names) - 1))
 
     if version_a == version_b:
         st.info("Pick two different versions to compare.")
@@ -176,11 +176,13 @@ def _render_compare_view(state: DashboardState) -> None:
 
     cols = st.columns(3)
     with cols[0]:
-        st.metric(f"{version_a} pass rate",
-                  f"{pass_a:.0%}" if pass_a is not None else "—")
+        st.metric(
+            f"{version_a} pass rate", f"{pass_a:.0%}" if pass_a is not None else "—"
+        )
     with cols[1]:
-        st.metric(f"{version_b} pass rate",
-                  f"{pass_b:.0%}" if pass_b is not None else "—")
+        st.metric(
+            f"{version_b} pass rate", f"{pass_b:.0%}" if pass_b is not None else "—"
+        )
     with cols[2]:
         if delta is not None:
             st.metric("Δ pass rate", f"{delta:+.0%}")
@@ -191,12 +193,14 @@ def _render_compare_view(state: DashboardState) -> None:
         st.markdown("**Category breakdown**")
         rows = []
         for cat, scores in diff["categories"].items():
-            rows.append({
-                "category": cat,
-                f"{version_a}": scores["a"],
-                f"{version_b}": scores["b"],
-                "delta": scores["delta"],
-            })
+            rows.append(
+                {
+                    "category": cat,
+                    f"{version_a}": scores["a"],
+                    f"{version_b}": scores["b"],
+                    "delta": scores["delta"],
+                }
+            )
         st.dataframe(rows, use_container_width=True, hide_index=True)
 
 

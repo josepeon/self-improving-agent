@@ -69,11 +69,7 @@ def _attach_latest_report(version: ModelVersion, reports_dir: Path) -> dict:
     if reports_dir.exists():
         # Look for files like reports/<version>_*.json or reports/<version>.json
         candidates = sorted(
-            (
-                p
-                for p in reports_dir.glob(f"{version.version}*.json")
-                if p.is_file()
-            ),
+            (p for p in reports_dir.glob(f"{version.version}*.json") if p.is_file()),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
@@ -126,14 +122,16 @@ def _render_table(rows: list[dict]) -> None:
             pass_str = f"{row['evaluation_pass_rate']:.0%}"
 
         created = (row.get("created_at") or "")[:10]
-        print(fmt.format(
-            row["version"],
-            row["status"],
-            str(row["base_model"])[:24],
-            eval_marker,
-            pass_str,
-            created,
-        ))
+        print(
+            fmt.format(
+                row["version"],
+                row["status"],
+                str(row["base_model"])[:24],
+                eval_marker,
+                pass_str,
+                created,
+            )
+        )
 
     prod = next((r for r in rows if r["status"] == "production"), None)
     if prod:
