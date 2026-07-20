@@ -254,6 +254,7 @@ def _get_judge_provider(provider_name: str, model: str | None) -> Any:
     if cache_key in _provider_cache:
         return _provider_cache[cache_key]
 
+    provider: Any
     if provider_name == "groq":
         from self_improving_agent.providers.groq_provider import GroqProvider
 

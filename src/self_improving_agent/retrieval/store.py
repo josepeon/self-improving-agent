@@ -184,7 +184,7 @@ class VectorStore:
     def _count(self) -> int:
         self._ensure_client()
         assert self._collection is not None
-        return self._collection.count()
+        return int(self._collection.count())
 
     async def delete_collection(self) -> None:
         """Delete the entire collection."""

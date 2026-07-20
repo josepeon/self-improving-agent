@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+from typing import Any
 
 from self_improving_agent.pipeline.self_improve import (
     PipelineConfig,
@@ -21,6 +22,7 @@ from self_improving_agent.pipeline.self_improve import (
 )
 from self_improving_agent.reproducibility import set_seed
 from self_improving_agent.training.finetune import LoRAConfig
+from self_improving_agent.training.registry import ModelVersion
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +92,7 @@ def run(args: argparse.Namespace) -> int:
     )
 
     # Pipeline expects a model loader callable. For the CLI we wire MLXProvider.
-    async def model_loader(version):
+    async def model_loader(version: ModelVersion) -> Any:
         from self_improving_agent.providers.base import GenerationConfig
         from self_improving_agent.providers.mlx_provider import MLXProvider
 
@@ -100,8 +102,11 @@ def run(args: argparse.Namespace) -> int:
         )
 
         async def generate_fn(
-            messages, *, temperature: float = 0.0, max_tokens: int = 256
-        ):
+            messages: list[dict[str, str]],
+            *,
+            temperature: float = 0.0,
+            max_tokens: int = 256,
+        ) -> str:
             cfg = GenerationConfig(temperature=temperature, max_tokens=max_tokens)
             r = await provider.generate(messages, cfg)
             return r.text

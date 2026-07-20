@@ -26,7 +26,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -37,6 +37,7 @@ from self_improving_agent.providers.base import (
 )
 from self_improving_agent.training.judges import (
     EnsembleJudge,
+    Judge,
     ProviderJudge,
 )
 
@@ -51,7 +52,7 @@ logger = logging.getLogger(__name__)
 class QuestionPool(Protocol):
     """Anything that yields prompts as strings."""
 
-    def __iter__(self) -> Iterable[str]: ...
+    def __iter__(self) -> Iterator[str]: ...
 
 
 @dataclass
@@ -61,7 +62,7 @@ class JsonlQuestionPool:
     path: Path
     field_names: tuple[str, ...] = ("prompt", "question", "user")
 
-    def __iter__(self) -> Iterable[str]:
+    def __iter__(self) -> Iterator[str]:
         with open(self.path) as f:
             for line in f:
                 line = line.strip()
@@ -84,7 +85,7 @@ class ListQuestionPool:
 
     prompts: list[str]
 
-    def __iter__(self) -> Iterable[str]:
+    def __iter__(self) -> Iterator[str]:
         return iter(self.prompts)
 
 
@@ -247,7 +248,7 @@ async def run_distillation(
     output_path: str | Path,
     *,
     teacher: BaseModelProvider | None = None,
-    judges: list[ProviderJudge] | None = None,
+    judges: list[Judge] | None = None,
     judge_threshold: float = 7.0,
     system_prompt: str | None = None,
     max_concurrent: int = 4,

@@ -186,7 +186,8 @@ def _read_first_config(adapter_dir: Path) -> dict[str, Any]:
     if candidate.exists():
         try:
             with open(candidate) as f:
-                return json.load(f)
+                loaded: dict[str, Any] = json.load(f)
+                return loaded
         except json.JSONDecodeError:
             pass
 
@@ -195,7 +196,8 @@ def _read_first_config(adapter_dir: Path) -> dict[str, Any]:
     if parent_candidate.exists():
         try:
             with open(parent_candidate) as f:
-                return json.load(f)
+                parent_loaded: dict[str, Any] = json.load(f)
+                return parent_loaded
         except json.JSONDecodeError:
             pass
 

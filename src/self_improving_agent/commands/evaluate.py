@@ -16,8 +16,10 @@ import json
 import logging
 import time
 from pathlib import Path
+from typing import Any
 
 from self_improving_agent.evaluation.harness import EvaluationHarness
+from self_improving_agent.evaluation.models import EvaluationReport
 from self_improving_agent.training.registry import ModelRegistry, ModelVersion
 
 logger = logging.getLogger(__name__)
@@ -116,15 +118,19 @@ def _resolve_target(
     return registry.get_production()
 
 
-def _build_generate_fn(target: ModelVersion | None, remote: bool):
+def _build_generate_fn(target: ModelVersion | None, remote: bool) -> Any:
     """Construct an async generate function for the harness.
 
     The harness calls ``generate(messages, temperature=, max_tokens=)``. We
     wrap MLXProvider or GroqProvider in a shim with that signature.
     """
     # Local imports keep the import cost off `sia status` / `sia --help`.
-    from self_improving_agent.providers.base import GenerationConfig
+    from self_improving_agent.providers.base import (
+        BaseModelProvider,
+        GenerationConfig,
+    )
 
+    provider: BaseModelProvider
     if remote or target is None:
         from self_improving_agent.providers.groq_provider import GroqProvider
 
@@ -137,7 +143,12 @@ def _build_generate_fn(target: ModelVersion | None, remote: bool):
             adapter_path=target.adapter_path,
         )
 
-    async def generate_fn(messages, *, temperature: float = 0.0, max_tokens: int = 256):
+    async def generate_fn(
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.0,
+        max_tokens: int = 256,
+    ) -> str:
         config = GenerationConfig(temperature=temperature, max_tokens=max_tokens)
         response = await provider.generate(messages, config)
         return response.text
@@ -145,7 +156,7 @@ def _build_generate_fn(target: ModelVersion | None, remote: bool):
     return generate_fn
 
 
-def _render_report(report, elapsed_s: float) -> str:
+def _render_report(report: EvaluationReport, elapsed_s: float) -> str:
     lines = [
         f"Pass rate: {report.pass_rate:.0%}  "
         f"({report.passed_tests}/{report.total_tests})",
@@ -166,7 +177,7 @@ def _render_report(report, elapsed_s: float) -> str:
     return "\n".join(lines)
 
 
-def _report_to_dict(report) -> dict:
+def _report_to_dict(report: EvaluationReport) -> dict:
     return {
         "model_version": report.model_version,
         "timestamp": report.timestamp,

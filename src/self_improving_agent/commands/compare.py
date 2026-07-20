@@ -19,6 +19,7 @@ from pathlib import Path
 
 from self_improving_agent.evaluation.multi_base import (
     BaseModelSpec,
+    MultiBaseReport,
     evaluate_bases,
 )
 
@@ -103,7 +104,7 @@ def _parse_spec(raw: str) -> BaseModelSpec:
     )
 
 
-def _render_table(report) -> str:
+def _render_table(report: MultiBaseReport) -> str:
     rows = report.comparison_table()
     if not rows:
         return "No results."

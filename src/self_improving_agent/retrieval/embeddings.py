@@ -40,7 +40,7 @@ class EmbeddingModel:
     ) -> None:
         self.model_name = model_name
         self.device = device
-        self._model: Any | None = None
+        self._model: Any = None
         self._lock = asyncio.Lock()
 
     async def _ensure_loaded(self) -> None:
@@ -67,15 +67,17 @@ class EmbeddingModel:
         """Return embeddings for *texts* as a ``(N, dim)`` float32 array."""
         await self._ensure_loaded()
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(  # type: ignore[return-value]
+        result: np.ndarray = await loop.run_in_executor(
             None,
             partial(self._model.encode, texts, normalize_embeddings=True),
         )
+        return result
 
     async def embed_query(self, query: str) -> np.ndarray:
         """Embed a single query string, returning a 1-D array."""
         result = await self.embed([query])
-        return result[0]
+        row: np.ndarray = result[0]
+        return row
 
     @property
     def dimension(self) -> int:
@@ -83,4 +85,4 @@ class EmbeddingModel:
         if self._model is None:
             msg = "Model not loaded yet; call embed() first"
             raise RuntimeError(msg)
-        return self._model.get_sentence_embedding_dimension()
+        return int(self._model.get_sentence_embedding_dimension())

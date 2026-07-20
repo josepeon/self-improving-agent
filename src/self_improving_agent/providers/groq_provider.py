@@ -5,6 +5,7 @@ import logging
 import os
 import time
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from self_improving_agent.observability.cost_tracker import record_usage
 from self_improving_agent.providers.base import (
@@ -38,15 +39,15 @@ class GroqProvider(BaseModelProvider):
         timeout: float = DEFAULT_TIMEOUT,
     ):
         self._api_key = api_key or os.getenv("GROQ_API_KEY", "")
-        self._model = model or os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL)
+        self._model: str = model or os.getenv("GROQ_MODEL") or DEFAULT_GROQ_MODEL
         self._timeout = timeout
-        self._client = None
+        self._client: Any = None
 
     @property
     def name(self) -> str:
         return "groq"
 
-    def _get_client(self):
+    def _get_client(self) -> Any:
         """Lazy-initialize the Groq client."""
         if self._client is None:
             try:

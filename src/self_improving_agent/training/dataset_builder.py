@@ -125,14 +125,14 @@ class DatasetBuilder:
 
         pairs: list[dict[str, Any]] = []
         for pos in positives:
-            neg = negative_map.get(pos.user_message)
-            if neg is None:
+            matched_neg = negative_map.get(pos.user_message)
+            if matched_neg is None:
                 continue
             pairs.append(
                 {
                     "prompt": pos.user_message,
                     "chosen": pos.response_text,
-                    "rejected": neg.response_text,
+                    "rejected": matched_neg.response_text,
                 }
             )
 

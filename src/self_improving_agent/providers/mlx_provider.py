@@ -10,6 +10,7 @@ import logging
 import os
 import time
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from self_improving_agent.observability.cost_tracker import record_usage
 from self_improving_agent.providers.base import (
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_MLX_MODEL = "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"
 
 
-def _make_sampler(temperature: float, top_p: float):
+def _make_sampler(temperature: float, top_p: float) -> Any | None:
     """Build an mlx-lm sampler if the newer API is available; else return None.
 
     mlx-lm < 0.20 took temp= / top_p= as direct kwargs to generate().
@@ -53,10 +54,12 @@ class MLXProvider(BaseModelProvider):
         model_path: str | None = None,
         adapter_path: str | None = None,
     ):
-        self._model_path = model_path or os.getenv("MLX_MODEL", DEFAULT_MLX_MODEL)
+        self._model_path: str = (
+            model_path or os.getenv("MLX_MODEL") or DEFAULT_MLX_MODEL
+        )
         self._adapter_path = adapter_path
-        self._model = None
-        self._tokenizer = None
+        self._model: Any = None
+        self._tokenizer: Any = None
         self._lock = asyncio.Lock()
 
     @property
@@ -85,14 +88,15 @@ class MLXProvider(BaseModelProvider):
                 ) from e
 
             # Run the blocking load in a thread to avoid blocking the event loop
-            loop = asyncio.get_event_loop()
-            self._model, self._tokenizer = await loop.run_in_executor(
+            loop = asyncio.get_running_loop()
+            loaded = await loop.run_in_executor(
                 None,
                 lambda: load(
                     self._model_path,
                     adapter_path=self._adapter_path,
                 ),
             )
+            self._model, self._tokenizer = loaded[0], loaded[1]
 
             elapsed = (time.perf_counter() - start) * 1000
             logger.info("MLX model loaded in %.1fms", elapsed)
@@ -209,7 +213,9 @@ class MLXProvider(BaseModelProvider):
             try:
                 from mlx_lm import stream_generate
             except ImportError:
-                from mlx_lm.utils import stream_generate
+                from mlx_lm.utils import (  # type: ignore[attr-defined, no-redef]
+                    stream_generate,
+                )
 
             # stream_generate is a synchronous generator — wrap it
             loop = asyncio.get_event_loop()

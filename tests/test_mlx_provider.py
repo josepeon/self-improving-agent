@@ -95,8 +95,8 @@ class TestMLXProviderHealth:
     async def test_health_check_model_not_loaded(self):
         """Health check should fail gracefully when model can't load."""
         provider = MLXProvider(model_path="nonexistent-model")
-        # Don't pre-load — let it try and fail
-        result = await provider.health_check()
+        with patch("mlx_lm.load", side_effect=RuntimeError("model not found")):
+            result = await provider.health_check()
         assert result is False
 
 

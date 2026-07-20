@@ -171,7 +171,9 @@ class FineTuner:
             from mlx_lm.tuner.utils import linear_to_lora_layers
 
             # 1. Load model + tokenizer
-            model, tokenizer = load(base_model)
+            # (load() is typed as a 2-or-3 tuple union; without
+            # return_config=True it always returns 2 values)
+            model, tokenizer = load(base_model)  # type: ignore[misc]
 
             # 2. Apply LoRA layers
             model.freeze()
@@ -188,7 +190,7 @@ class FineTuner:
             # Count trainable params
             import mlx.utils
 
-            n_params = sum(
+            n_params = sum(  # type: ignore[misc]
                 v.size for _, v in mlx.utils.tree_flatten(model.trainable_parameters())
             )
             logger.info("Trainable parameters: %s", f"{n_params:,}")
@@ -201,7 +203,10 @@ class FineTuner:
                 hf_dataset = False
                 mask_prompt = False
 
-            train_set, valid_set, _ = load_dataset(_DataArgs(), tokenizer)
+            train_set, valid_set, _ = load_dataset(
+                _DataArgs(),
+                tokenizer,  # type: ignore[arg-type]
+            )
             # Wrap in CacheDataset so iterate_batches gets processed tuples
             train_set = CacheDataset(train_set) if train_set else train_set
             if valid_set and len(valid_set) > 0:
@@ -280,7 +285,7 @@ class FineTuner:
         def _generate() -> str:
             from mlx_lm import generate, load
 
-            model, tokenizer = load(
+            model, tokenizer = load(  # type: ignore[misc]
                 self.base_model,
                 adapter_path=str(adapter_path),
             )

@@ -25,6 +25,7 @@ import contextlib
 import logging
 import os
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -150,7 +151,7 @@ def _build_provider(version: ModelVersion) -> Any:
 
 
 @asynccontextmanager
-async def _lifespan(app: FastAPI):
+async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     state = ServerState(
         registry_path=os.environ.get("SIA_REGISTRY_PATH", "models/registry.json"),
         feedback_path=os.environ.get(
@@ -184,7 +185,7 @@ def _make_app() -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/metrics")
-    async def metrics_endpoint():
+    async def metrics_endpoint() -> Response:
         """Prometheus-format metrics. Standard scrape endpoint."""
         state: ServerState = app.state.sia
         # Refresh the version gauge to reflect the currently-loaded model
@@ -254,7 +255,7 @@ def _make_app() -> FastAPI:
         }
 
     @app.post("/v1/chat/completions")
-    async def chat_completions(request: ChatCompletionRequest):
+    async def chat_completions(request: ChatCompletionRequest) -> Any:
         state: ServerState = app.state.sia
         provider = await state.ensure_loaded()
 
@@ -324,7 +325,7 @@ async def _stream_chat(
     provider: Any,
     request: ChatCompletionRequest,
     served_version: str | None,
-):
+) -> AsyncGenerator[str, None]:
     """SSE generator matching OpenAI's wire format."""
     import json
     import uuid
@@ -383,7 +384,7 @@ async def _stream_chat(
     yield "data: [DONE]\n\n"
 
 
-def _normalize_stop(stop):
+def _normalize_stop(stop: str | list[str] | None) -> list[str] | None:
     if stop is None:
         return None
     if isinstance(stop, str):

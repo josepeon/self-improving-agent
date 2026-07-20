@@ -20,13 +20,14 @@ Used by the new `sia compare-bases` command (added in commands/compare.py).
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from self_improving_agent.evaluation.harness import EvaluationHarness
 from self_improving_agent.evaluation.models import EvaluationReport
-from self_improving_agent.providers.base import GenerationConfig
+from self_improving_agent.providers.base import BaseModelProvider, GenerationConfig
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ async def evaluate_bases(
     specs: list[BaseModelSpec],
     suite_path: str | Path | None = None,
     *,
-    provider_factory=None,
+    provider_factory: Callable[[BaseModelSpec], BaseModelProvider] | None = None,
 ) -> MultiBaseReport:
     """Evaluate every spec in ``specs`` against the same suite.
 
@@ -141,7 +142,11 @@ async def evaluate_bases(
     for spec in specs:
         provider = factory(spec)
 
-        async def generate_fn(message, history=None, _provider=provider):
+        async def generate_fn(
+            message: str,
+            history: list[dict[str, str]] | None = None,
+            _provider: BaseModelProvider = provider,
+        ) -> str:
             cfg = GenerationConfig(temperature=0.0, max_tokens=256)
             history = history or []
             messages = [*history, {"role": "user", "content": message}]
@@ -165,7 +170,7 @@ async def evaluate_bases(
     return report
 
 
-def _default_provider_factory(spec: BaseModelSpec):
+def _default_provider_factory(spec: BaseModelSpec) -> BaseModelProvider:
     if spec.provider == "groq":
         from self_improving_agent.providers.groq_provider import GroqProvider
 

@@ -21,6 +21,7 @@ replace this with a classifier trained on the interaction log.
 import logging
 import os
 import re
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -204,7 +205,7 @@ class ModelRouter:
         total = length_score + marker_score + tech_score + multi_turn_score
         return min(total, 1.0)
 
-    def _ensure_classifier(self):
+    def _ensure_classifier(self) -> None:
         """Lazy-load a trained classifier from disk if available."""
         if self._classifier is not None or self._classifier_attempted_load:
             return
@@ -323,7 +324,7 @@ class ModelRouter:
         config: GenerationConfig | None = None,
         quality_mode: str = "default",
         force_provider: str | None = None,
-    ):
+    ) -> AsyncGenerator[str, None]:
         """Route a streaming request to the optimal provider.
 
         Same routing logic as route(), but returns an async generator.
