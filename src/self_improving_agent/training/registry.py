@@ -13,6 +13,7 @@ Promotion flow::
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -71,7 +72,14 @@ class ModelRegistry:
     # ── CRUD ──────────────────────────────────────────────────────────
 
     def register(self, version: ModelVersion) -> None:
-        """Register a new model version (or overwrite existing)."""
+        """Register a new model version (or overwrite existing).
+
+        Registering a version directly as ``production`` or ``canary``
+        demotes any other holder of that status — the registry keeps at
+        most one of each.
+        """
+        if version.status in (ModelStatus.PRODUCTION, ModelStatus.CANARY):
+            self._demote_others(version.version, version.status)
         self.versions[version.version] = version
         self._save()
 
@@ -88,14 +96,18 @@ class ModelRegistry:
     # ── Promotion ─────────────────────────────────────────────────────
 
     def get_production(self) -> ModelVersion | None:
-        """Return the current production model, if any."""
+        """Return the current production model, if any.
+
+        If legacy data contains several production entries, the newest
+        by ``created_at`` wins (deterministically).
+        """
         prods = self.list_versions(status=ModelStatus.PRODUCTION)
-        return prods[0] if prods else None
+        return max(prods, key=lambda v: v.created_at) if prods else None
 
     def get_canary(self) -> ModelVersion | None:
         """Return the current canary model, if any."""
         canaries = self.list_versions(status=ModelStatus.CANARY)
-        return canaries[0] if canaries else None
+        return max(canaries, key=lambda v: v.created_at) if canaries else None
 
     def promote_to_evaluating(self, version: str) -> None:
         """Move a version from training to evaluating."""
@@ -106,9 +118,7 @@ class ModelRegistry:
 
         If another canary already exists it is demoted to deprecated.
         """
-        old_canary = self.get_canary()
-        if old_canary and old_canary.version != version:
-            old_canary.status = ModelStatus.DEPRECATED
+        self._demote_others(version, ModelStatus.CANARY)
         self._transition(version, ModelStatus.CANARY)
 
     def promote_to_production(self, version: str) -> None:
@@ -116,10 +126,14 @@ class ModelRegistry:
 
         The previously-production version is deprecated automatically.
         """
-        old_prod = self.get_production()
-        if old_prod and old_prod.version != version:
-            old_prod.status = ModelStatus.DEPRECATED
+        self._demote_others(version, ModelStatus.PRODUCTION)
         self._transition(version, ModelStatus.PRODUCTION)
+
+    def _demote_others(self, version: str, status: str) -> None:
+        """Deprecate every OTHER version currently holding ``status``."""
+        for other in self.list_versions(status=status):
+            if other.version != version:
+                other.status = ModelStatus.DEPRECATED
 
     def mark_failed(self, version: str) -> None:
         """Mark a version that did not pass evaluation."""
@@ -166,8 +180,12 @@ class ModelRegistry:
             "updated_at": datetime.now(UTC).isoformat(),
             "versions": [v.to_dict() for v in self.versions.values()],
         }
-        with open(self.registry_path, "w") as f:
+        # Atomic write: the serving layer polls this file for hot-reload,
+        # so it must never observe a half-written JSON.
+        tmp_path = self.registry_path.with_suffix(".json.tmp")
+        with open(tmp_path, "w") as f:
             json.dump(payload, f, indent=2)
+        os.replace(tmp_path, self.registry_path)
 
     def _transition(self, version: str, new_status: str) -> None:
         entry = self.versions.get(version)
