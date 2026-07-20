@@ -32,14 +32,17 @@ logger = logging.getLogger(__name__)
 
 
 class GenerateFn(Protocol):
-    """Callable that matches the signature the evaluation harness expects."""
+    """Callable that matches the signature the evaluation harness expects.
+
+    The harness calls ``generate_fn(user_message, history=history)`` where
+    ``user_message`` is the last user turn and ``history`` is the prior
+    messages in OpenAI chat format (see ``EvaluationHarness.run_test``).
+    """
 
     async def __call__(
         self,
-        messages: list[dict[str, str]],
-        *,
-        temperature: float = ...,
-        max_tokens: int = ...,
+        message: str,
+        history: list[dict[str, str]] | None = None,
     ) -> str: ...
 
 

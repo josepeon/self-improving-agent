@@ -126,8 +126,14 @@ class InteractionLogStore:
         if not self.interactions_path.exists():
             return None
         for year_dir in sorted(self.interactions_path.iterdir()):
+            if not year_dir.is_dir():
+                continue  # skip stray files (.DS_Store etc.)
             for month_dir in sorted(year_dir.iterdir()):
+                if not month_dir.is_dir():
+                    continue
                 for day_dir in sorted(month_dir.iterdir()):
+                    if not day_dir.is_dir():
+                        continue
                     day = datetime.strptime(
                         str(day_dir.relative_to(self.interactions_path)),
                         "%Y/%m/%d",

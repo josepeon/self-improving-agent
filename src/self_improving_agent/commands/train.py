@@ -102,12 +102,11 @@ def run(args: argparse.Namespace) -> int:
         )
 
         async def generate_fn(
-            messages: list[dict[str, str]],
-            *,
-            temperature: float = 0.0,
-            max_tokens: int = 256,
+            message: str,
+            history: list[dict[str, str]] | None = None,
         ) -> str:
-            cfg = GenerationConfig(temperature=temperature, max_tokens=max_tokens)
+            cfg = GenerationConfig(temperature=0.0, max_tokens=256)
+            messages = [*(history or []), {"role": "user", "content": message}]
             r = await provider.generate(messages, cfg)
             return r.text
 

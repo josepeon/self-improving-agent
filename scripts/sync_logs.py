@@ -93,6 +93,14 @@ def run_railway_logs(
     print(f"  Running: {' '.join(cmd)}")
     print(f"  Working dir: {cwd}")
 
+    if not Path(cwd).is_dir():
+        print(
+            f"ERROR: working directory {cwd} does not exist. "
+            "Pass --companion-dir or set RAILWAY_PROJECT_DIR to the "
+            "oh-companion-backend checkout."
+        )
+        sys.exit(1)
+
     try:
         result = subprocess.run(
             cmd,

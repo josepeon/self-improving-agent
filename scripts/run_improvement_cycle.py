@@ -540,8 +540,7 @@ def main() -> None:
     parser.add_argument(
         "--skip-self-play",
         action="store_true",
-        default=True,
-        help="Skip self-play generation (default: skip)",
+        help="Skip self-play generation even if --self-play is given",
     )
     parser.add_argument(
         "--self-play",
@@ -566,8 +565,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # --self-play overrides --skip-self-play
-    skip_self_play = not args.self_play
+    # Skipped by default; --self-play enables it; an explicit
+    # --skip-self-play always wins.
+    skip_self_play = args.skip_self_play or not args.self_play
 
     asyncio.run(
         run_cycle(

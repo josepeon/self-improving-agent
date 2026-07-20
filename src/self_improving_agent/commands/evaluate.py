@@ -94,7 +94,7 @@ def run(args: argparse.Namespace) -> int:
     print(_render_report(report, elapsed))
 
     if args.no_write:
-        return 0 if report.pass_rate >= 0.0 else 1
+        return 0 if report.failed_tests == 0 else 1
 
     reports_dir = Path(args.reports_dir)
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -121,7 +121,7 @@ def _resolve_target(
 def _build_generate_fn(target: ModelVersion | None, remote: bool) -> Any:
     """Construct an async generate function for the harness.
 
-    The harness calls ``generate(messages, temperature=, max_tokens=)``. We
+    The harness calls ``generate_fn(user_message, history=history)``. We
     wrap MLXProvider or GroqProvider in a shim with that signature.
     """
     # Local imports keep the import cost off `sia status` / `sia --help`.
@@ -144,12 +144,11 @@ def _build_generate_fn(target: ModelVersion | None, remote: bool) -> Any:
         )
 
     async def generate_fn(
-        messages: list[dict[str, str]],
-        *,
-        temperature: float = 0.0,
-        max_tokens: int = 256,
+        message: str,
+        history: list[dict[str, str]] | None = None,
     ) -> str:
-        config = GenerationConfig(temperature=temperature, max_tokens=max_tokens)
+        config = GenerationConfig(temperature=0.0, max_tokens=256)
+        messages = [*(history or []), {"role": "user", "content": message}]
         response = await provider.generate(messages, config)
         return response.text
 

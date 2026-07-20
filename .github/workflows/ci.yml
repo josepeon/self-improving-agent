@@ -27,6 +27,9 @@ jobs:
       - name: Format check with ruff
         run: ruff format --check src/ tests/
 
+      - name: Type-check with mypy
+        run: mypy src/
+
       - name: Run tests
         run: pytest --cov=src/self_improving_agent --cov-fail-under=80 -m "not slow and not integration"
 
