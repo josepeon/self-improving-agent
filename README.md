@@ -41,7 +41,7 @@ Infrastructure for training, evaluating, and continuously improving a local AI m
 - **LoRA Fine-Tuning** — MLX-native LoRA training with gradient checkpointing, configurable rank/alpha, and adapter persistence.
 - **Model Registry** — Version tracking with status lifecycle (candidate → staging → production → retired).
 - **Self-Improvement Pipeline** — Orchestrates the full loop: aggregate logs → build dataset → train → evaluate → promote.
-- **Self-Play Conversations** — Local model generates multi-turn conversations; Groq (70B) judges quality and only high-scoring conversations become training data.
+- **Self-Play Conversations** — Local model generates multi-turn conversations; a Groq-hosted judge (gpt-oss-120b) scores quality and only high-scoring conversations become training data.
 
 ## Project Structure
 
@@ -235,7 +235,8 @@ All configuration is via environment variables (see `.env.example`):
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GROQ_API_KEY` | — | Groq API key |
-| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model for inference |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model for inference, judging, and data generation (Groq retired its Llama chat models on 2026-08-16; retired ids set here are ignored with a warning) |
+| `GROQ_FALLBACK_MODEL` | `openai/gpt-oss-20b` | Used automatically if the primary model is retired |
 | `MLX_MODEL` | `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit` | Local MLX model |
 | `SIA_ROUTING_MODE` | `auto` | Routing: `auto`, `local-only`, `remote-only` |
 | `SIA_LOG_DIR` | `logs` | Interaction log directory |

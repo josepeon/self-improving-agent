@@ -60,9 +60,22 @@ class TestGroqProviderInit:
     def test_name(self, groq_provider):
         assert groq_provider.name == "groq"
 
-    def test_default_model(self):
+    def test_default_model(self, monkeypatch):
+        monkeypatch.delenv("GROQ_MODEL", raising=False)
+        monkeypatch.delenv("GROQ_FALLBACK_MODEL", raising=False)
         provider = GroqProvider(api_key="key")
-        assert provider._model == "llama-3.3-70b-versatile"
+        assert provider._model == "openai/gpt-oss-120b"
+        assert provider._fallback_model == "openai/gpt-oss-20b"
+
+    def test_stale_env_pin_is_ignored(self, monkeypatch):
+        """A retired model left in .env must not be used (it can only fail)."""
+        monkeypatch.setenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        provider = GroqProvider(api_key="key")
+        assert provider._model == "openai/gpt-oss-120b"
+
+    def test_live_env_pin_is_respected(self, monkeypatch):
+        monkeypatch.setenv("GROQ_MODEL", "openai/gpt-oss-20b")
+        assert GroqProvider(api_key="key")._model == "openai/gpt-oss-20b"
 
     def test_custom_model(self):
         provider = GroqProvider(api_key="key", model="custom-model")
@@ -256,3 +269,84 @@ class TestGroqProviderStreamError:
                 messages=[{"role": "user", "content": "Hi"}]
             ):
                 pass
+
+
+class TestGroqProviderGptOss:
+    """gpt-oss reasoning headroom and retired-model fallback (mocked)."""
+
+    @pytest.mark.asyncio
+    async def test_reasoning_models_get_headroom_and_low_effort(self, monkeypatch):
+        monkeypatch.delenv("GROQ_MODEL", raising=False)
+        provider = GroqProvider(api_key="k")  # default: gpt-oss-120b
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=_mock_completion())
+        provider._client = mock_client
+
+        await provider.generate(
+            messages=[{"role": "user", "content": "Hi"}],
+            config=GenerationConfig(max_tokens=100),
+        )
+
+        kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert kwargs["model"] == "openai/gpt-oss-120b"
+        assert kwargs["max_tokens"] == 100 + 512
+        assert kwargs["extra_body"] == {"reasoning_effort": "low"}
+
+    @pytest.mark.asyncio
+    async def test_retired_model_falls_back_once(self, monkeypatch):
+        monkeypatch.delenv("GROQ_MODEL", raising=False)
+        provider = GroqProvider(api_key="k")
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(
+            side_effect=[
+                Exception("model_decommissioned: this model has been decommissioned"),
+                _mock_completion("from fallback", 12),
+            ]
+        )
+        provider._client = mock_client
+
+        response = await provider.generate(messages=[{"role": "user", "content": "Hi"}])
+
+        assert response.text == "from fallback"
+        assert response.model == "openai/gpt-oss-20b"  # reports the model actually used
+        calls = mock_client.chat.completions.create.call_args_list
+        assert [c.kwargs["model"] for c in calls] == [
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_does_not_downgrade_the_model(self, monkeypatch):
+        """A throttled judge must fail loudly, not silently switch to a weaker one."""
+        monkeypatch.delenv("GROQ_MODEL", raising=False)
+        provider = GroqProvider(api_key="k")
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(
+            side_effect=Exception("429 rate limit reached")
+        )
+        provider._client = mock_client
+
+        with pytest.raises(Exception, match="rate limit"):
+            await provider.generate(messages=[{"role": "user", "content": "Hi"}])
+        assert mock_client.chat.completions.create.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_stream_falls_back_when_model_retired(self, monkeypatch):
+        monkeypatch.delenv("GROQ_MODEL", raising=False)
+        provider = GroqProvider(api_key="k")
+
+        async def _gen():
+            for chunk in _mock_stream_chunks(["A", "B"]):
+                yield chunk
+
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(
+            side_effect=[Exception("model_not_found"), _gen()]
+        )
+        provider._client = mock_client
+
+        out = [t async for t in provider.generate_stream([{"role": "user", "content": "Hi"}])]
+
+        assert out == ["A", "B"]
+        models = [c.kwargs["model"] for c in mock_client.chat.completions.create.call_args_list]
+        assert models == ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]

@@ -23,6 +23,8 @@ import sys
 import time
 from pathlib import Path
 
+from self_improving_agent.providers.groq_models import request_opts, resolve_groq_model
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 ZEROZERO = PROJECT_ROOT.parent
@@ -74,12 +76,12 @@ class SyntheticDataGenerator:
         self,
         *,
         api_key: str | None = None,
-        model: str = "llama-3.3-70b-versatile",
+        model: str | None = None,
         system_prompt: str = "",
         rate_limit_delay: float = 1.0,
     ) -> None:
         self.api_key = api_key or os.getenv("GROQ_API_KEY", "")
-        self.model = model
+        self.model = model or resolve_groq_model()
         self.system_prompt = system_prompt
         self.rate_limit_delay = rate_limit_delay
         self._client = None
@@ -110,7 +112,7 @@ class SyntheticDataGenerator:
                     model=self.model,
                     messages=messages,
                     temperature=temperature,
-                    max_tokens=max_tokens,
+                    **request_opts(self.model, max_tokens),
                 )
                 return response.choices[0].message.content or ""
             except Exception as e:

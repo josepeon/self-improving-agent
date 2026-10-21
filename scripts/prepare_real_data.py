@@ -29,6 +29,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from self_improving_agent.providers.groq_models import request_opts, resolve_groq_model
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 ZEROZERO = PROJECT_ROOT.parent
@@ -82,12 +84,13 @@ Return ONLY: {{"score": <int>, "reason": "<one sentence>"}}"""
 async def score_conversation(
     conversation: list[dict],
     groq_client: object,
-    groq_model: str = "llama-3.3-70b-versatile",
+    groq_model: str | None = None,
 ) -> tuple[int, str]:
     """Score a conversation using Groq as judge.
 
     Returns (score, reason).
     """
+    groq_model = groq_model or resolve_groq_model()
     lines = []
     for msg in conversation:
         role = msg["role"].upper()
@@ -104,7 +107,7 @@ async def score_conversation(
             model=groq_model,
             messages=messages,
             temperature=0.3,
-            max_tokens=100,
+            **request_opts(groq_model, 100),
         )
         raw = resp.choices[0].message.content or ""
         cleaned = raw.strip()

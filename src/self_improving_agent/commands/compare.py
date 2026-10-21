@@ -6,7 +6,7 @@ Example:
     sia compare-bases \\
         --spec llama-8b=mlx/mlx-community/Meta-Llama-3.1-8B-Instruct-4bit+adapter=models/finetuned/v1.2-oh/adapters \\
         --spec qwen-7b=mlx/mlx-community/Qwen2-7B-Instruct-4bit \\
-        --spec groq-70b=groq/llama-3.3-70b-versatile
+        --spec groq-120b=groq/openai/gpt-oss-120b
 """
 
 from __future__ import annotations

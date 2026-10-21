@@ -56,7 +56,10 @@ class ModelPrice:
 # Pricing snapshot. Free Groq tier is the default; OpenAI/Anthropic listed
 # in case a new provider gets added. Mlx is local so $0.
 _DEFAULT_PRICES: dict[tuple[str, str], ModelPrice] = {
-    # Groq: free tier for SIA usage
+    # Groq gpt-oss (current production chat models; list price per 1M tokens)
+    ("groq", "openai/gpt-oss-120b"): ModelPrice(0.15, 0.60),
+    ("groq", "openai/gpt-oss-20b"): ModelPrice(0.075, 0.30),
+    # Groq Llama (retired 2026-08-16; kept so historical cost logs still resolve)
     ("groq", "llama-3.3-70b-versatile"): ModelPrice(0.0, 0.0),
     ("groq", "llama-3.1-8b-instant"): ModelPrice(0.0, 0.0),
     ("groq", "gemma2-9b-it"): ModelPrice(0.0, 0.0),

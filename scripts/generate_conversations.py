@@ -34,6 +34,8 @@ import sys
 import time
 from pathlib import Path
 
+from self_improving_agent.providers.groq_models import request_opts, resolve_groq_model
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 ZEROZERO = PROJECT_ROOT.parent
@@ -133,14 +135,14 @@ class ConversationGenerator:
         self,
         *,
         api_key: str | None = None,
-        groq_model: str = "llama-3.3-70b-versatile",
+        groq_model: str | None = None,
         system_prompt: str = "",
         adapter_path: str | Path = ADAPTER_PATH,
         base_model: str = BASE_MODEL,
         rate_limit_delay: float = 1.5,
     ) -> None:
         self.api_key = api_key or os.getenv("GROQ_API_KEY", "")
-        self.groq_model = groq_model
+        self.groq_model = groq_model or resolve_groq_model()
         self.system_prompt = system_prompt
         self.adapter_path = str(adapter_path)
         self.base_model = base_model
@@ -170,7 +172,7 @@ class ConversationGenerator:
                     model=self.groq_model,
                     messages=messages,
                     temperature=temperature,
-                    max_tokens=max_tokens,
+                    **request_opts(self.groq_model, max_tokens),
                 )
                 return resp.choices[0].message.content or ""
             except Exception as e:

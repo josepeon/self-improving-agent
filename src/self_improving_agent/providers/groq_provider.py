@@ -1,4 +1,4 @@
-"""Groq API provider — wraps Groq SDK for remote Llama 3.3 70B inference."""
+"""Groq API provider — wraps the Groq SDK for remote inference (gpt-oss)."""
 
 import contextlib
 import logging
@@ -13,23 +13,35 @@ from self_improving_agent.providers.base import (
     GenerationConfig,
     ProviderResponse,
 )
+from self_improving_agent.providers.groq_models import (
+    DEFAULT_GROQ_FALLBACK_MODEL,
+    DEFAULT_GROQ_MODEL,
+    is_retired_model_error,
+    request_opts,
+    resolve_groq_fallback_model,
+    resolve_groq_model,
+)
 
 logger = logging.getLogger(__name__)
 
-# Defaults
-DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+__all__ = ["DEFAULT_GROQ_FALLBACK_MODEL", "DEFAULT_GROQ_MODEL", "GroqProvider"]
+
 DEFAULT_TIMEOUT = 30.0
 
 
 class GroqProvider(BaseModelProvider):
     """Groq API provider for high-capability remote inference.
 
-    Uses the Groq SDK to call hosted Llama models. Intended as the
-    high-quality fallback when the local MLX model is insufficient.
+    Uses the Groq SDK to call hosted models (gpt-oss by default). Intended
+    as the high-quality fallback when the local MLX model is insufficient.
+    If the configured model has been retired by Groq, a call transparently
+    retries once on the fallback model (rate limits are NOT retried this way,
+    so a throttled judge never silently downgrades to a weaker one).
 
     Configuration via environment variables:
         GROQ_API_KEY: API key (required)
-        GROQ_MODEL: Model name (default: llama-3.3-70b-versatile)
+        GROQ_MODEL: Model name (default: openai/gpt-oss-120b)
+        GROQ_FALLBACK_MODEL: Used if the model is retired (default: openai/gpt-oss-20b)
     """
 
     def __init__(
@@ -37,9 +49,11 @@ class GroqProvider(BaseModelProvider):
         api_key: str | None = None,
         model: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
+        fallback_model: str | None = None,
     ):
         self._api_key = api_key or os.getenv("GROQ_API_KEY", "")
-        self._model: str = model or os.getenv("GROQ_MODEL") or DEFAULT_GROQ_MODEL
+        self._model: str = model or resolve_groq_model()
+        self._fallback_model: str = fallback_model or resolve_groq_fallback_model()
         self._timeout = timeout
         self._client: Any = None
 
@@ -70,6 +84,28 @@ class GroqProvider(BaseModelProvider):
             )
         return self._client
 
+    async def _create(
+        self,
+        client: Any,
+        model: str,
+        messages: list[dict[str, str]],
+        config: GenerationConfig,
+        *,
+        stream: bool = False,
+    ) -> Any:
+        """One chat-completions call with model-specific request options."""
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "stop": config.stop_sequences,
+            **request_opts(model, config.max_tokens),
+        }
+        if stream:
+            kwargs["stream"] = True
+        return await client.chat.completions.create(**kwargs)
+
     async def generate(
         self,
         messages: list[dict[str, str]],
@@ -88,15 +124,22 @@ class GroqProvider(BaseModelProvider):
         client = self._get_client()
 
         start = time.perf_counter()
+        model = self._model
         try:
-            response = await client.chat.completions.create(
-                model=self._model,
-                messages=messages,
-                max_tokens=config.max_tokens,
-                temperature=config.temperature,
-                top_p=config.top_p,
-                stop=config.stop_sequences,
-            )
+            try:
+                response = await self._create(client, model, messages, config)
+            except Exception as e:
+                if model != self._fallback_model and is_retired_model_error(e):
+                    logger.warning(
+                        "Groq model %s is retired (%s); retrying on %s",
+                        model,
+                        e,
+                        self._fallback_model,
+                    )
+                    model = self._fallback_model
+                    response = await self._create(client, model, messages, config)
+                else:
+                    raise
         except Exception as e:
             logger.error("Groq API call failed: %s", e)
             raise
@@ -116,14 +159,14 @@ class GroqProvider(BaseModelProvider):
             with contextlib.suppress(Exception):
                 record_usage(
                     provider="groq",
-                    model=self._model,
+                    model=model,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                 )
 
         logger.debug(
             "Groq response: model=%s tokens=%d latency=%.1fms",
-            self._model,
+            model,
             tokens_used,
             latency_ms,
         )
@@ -131,7 +174,7 @@ class GroqProvider(BaseModelProvider):
         return ProviderResponse(
             text=text,
             provider=self.name,
-            model=self._model,
+            model=model,
             latency_ms=latency_ms,
             tokens_used=tokens_used,
             metadata={
@@ -159,15 +202,23 @@ class GroqProvider(BaseModelProvider):
         client = self._get_client()
 
         try:
-            stream = await client.chat.completions.create(
-                model=self._model,
-                messages=messages,
-                max_tokens=config.max_tokens,
-                temperature=config.temperature,
-                top_p=config.top_p,
-                stop=config.stop_sequences,
-                stream=True,
-            )
+            try:
+                stream = await self._create(
+                    client, self._model, messages, config, stream=True
+                )
+            except Exception as e:
+                if self._model != self._fallback_model and is_retired_model_error(e):
+                    logger.warning(
+                        "Groq model %s is retired (%s); streaming on %s",
+                        self._model,
+                        e,
+                        self._fallback_model,
+                    )
+                    stream = await self._create(
+                        client, self._fallback_model, messages, config, stream=True
+                    )
+                else:
+                    raise
 
             async for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:
@@ -188,7 +239,7 @@ class GroqProvider(BaseModelProvider):
             response = await client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": "hi"}],
-                max_tokens=1,
+                **request_opts(self._model, 1),
             )
             return bool(response.choices)
         except Exception as e:

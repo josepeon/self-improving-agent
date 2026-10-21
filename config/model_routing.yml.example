@@ -25,13 +25,14 @@
 #                        Lazy-loaded classifier weights; overrides the heuristic
 #                        when its confidence is high enough.
 #
-#   GROQ_MODEL           Groq model id (default: llama-3.3-70b-versatile)
+#   GROQ_MODEL           Groq model id (default: openai/gpt-oss-120b)
+#   GROQ_FALLBACK_MODEL  Used if the primary is retired (default: openai/gpt-oss-20b)
 #   MLX_MODEL            HF id of the local MLX model
 #                        (default: mlx-community/Meta-Llama-3.1-8B-Instruct-4bit)
 #
 # Future per-role routing (parsed by core.providers.router when wired in):
 #
 # chat:        mlx/Meta-Llama-3.1-8B-Instruct-4bit
-# evaluation:  groq/llama-3.3-70b-versatile
-# distillation: groq/llama-3.3-70b-versatile
-# judging:     groq/llama-3.3-70b-versatile
+# evaluation:  groq/openai/gpt-oss-120b
+# distillation: groq/openai/gpt-oss-120b
+# judging:     groq/openai/gpt-oss-120b
